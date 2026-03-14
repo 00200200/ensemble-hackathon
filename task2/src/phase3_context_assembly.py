@@ -24,6 +24,8 @@ try:
 except ImportError:
     TREE_SITTER_AVAILABLE = False
 
+from src.llm_abstraction import CachedLLMAbstractor
+
 logger = logging.getLogger(__name__)
 
 
@@ -174,7 +176,12 @@ class ContextAssembler:
         seed_count: int = 5,
         expansion_depth: int = 1,
         centrality_threshold: int = 20,
-        centrality_penalty: float = 0.5
+        centrality_penalty: float = 0.5,
+        use_llm_abstracts: bool = True,
+        cache_dir: str = ".cache",
+        llm_model: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_base_url: Optional[str] = None
     ):
         self.graph = graph
         self.retriever = retriever
@@ -184,6 +191,37 @@ class ContextAssembler:
         self.centrality_threshold = centrality_threshold
         self.centrality_penalty = centrality_penalty
         self.query_builder = QueryBuilder()
+        self.use_llm_abstracts = use_llm_abstracts
+        
+        # Initialize LLM abstractor if enabled
+        self.llm_abstractor = None
+        if use_llm_abstracts:
+            try:
+                import os
+                # Auto-detect DeepSeek from env vars
+                model = llm_model or os.getenv("LLM_MODEL") or os.getenv("DEEPSEEK_MODEL", "gpt-4o-mini")
+                api_key = llm_api_key or os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+                base_url = llm_base_url or os.getenv("LLM_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL")
+                
+                # Auto-set DeepSeek base URL if not provided
+                if not base_url and "deepseek" in model.lower():
+                    base_url = "https://api.deepseek.com"
+                
+                if not api_key:
+                    logger.info("No LLM API key found. Using fallback abstracts (signature + docstring + deps).")
+                    logger.info("To enable LLM abstracts, set OPENAI_API_KEY or DEEPSEEK_API_KEY")
+                    self.use_llm_abstracts = False
+                else:
+                    self.llm_abstractor = CachedLLMAbstractor(
+                        cache_dir=cache_dir,
+                        model=model,
+                        api_key=api_key,
+                        base_url=base_url
+                    )
+                    logger.info(f"LLM abstractor initialized: {model}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize LLM abstractor: {e}")
+                self.use_llm_abstracts = False
     
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count (rough approximation)."""
@@ -249,7 +287,8 @@ class ContextAssembler:
             if degree > self.centrality_threshold:
                 seed_score *= self.centrality_penalty
             
-            code = seed_entity.raw_code if hasattr(seed_entity, 'raw_code') else str(seed_entity)
+            # Use abstract for retrieved seeds (not full code) to save tokens
+            code = self._create_abstract(seed_entity)
             tokens = self.estimate_tokens(code)
             
             item = ContextItem(
@@ -301,6 +340,20 @@ class ContextAssembler:
     
     def _create_abstract(self, entity: Any) -> str:
         """Create a functional abstract for an entity."""
+        # Try LLM abstractor first if enabled
+        if self.use_llm_abstracts and self.llm_abstractor:
+            try:
+                llm_abstract = self.llm_abstractor.get_abstract(entity)
+                if llm_abstract and len(llm_abstract) > 10:
+                    # Add signature as header if not in abstract
+                    signature = getattr(entity, 'signature', '')
+                    if signature and signature not in llm_abstract:
+                        return f"{signature}\n{llm_abstract}"
+                    return llm_abstract
+            except Exception as e:
+                logger.debug(f"LLM abstract failed: {e}")
+        
+        # Fallback: manual abstract
         parts = []
         
         if hasattr(entity, 'signature') and entity.signature:

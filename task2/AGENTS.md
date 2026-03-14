@@ -53,12 +53,55 @@ graph.add_file_entities("example.py", entities, imports)
 
 **Files:**
 - `src/vector_store.py` - Embeddings and hybrid retrieval
+- `src/llm_abstraction.py` - LLM-generated function summaries
 
 **Key Features:**
 - Dense embeddings: sentence-transformers/all-MiniLM-L6-v2 (fallback to simple embedder)
 - Sparse retrieval: BM25Okapi (fallback to simple BM25)
 - Hybrid scoring: S(q,d) = α·Dense + (1-α)·BM25, α=0.5
 - FAISS for fast nearest neighbor search
+- **LLM Abstraction**: GPT-4o-mini, DeepSeek, or any OpenAI-compatible API
+
+**LLM Abstraction Usage:**
+
+OpenAI (default):
+```bash
+export OPENAI_API_KEY="sk-..."
+export LLM_MODEL="gpt-4o-mini"  # optional
+python run_pipeline.py --stage practice --limit 10
+```
+
+DeepSeek (cheaper):
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+export LLM_MODEL="deepseek-chat"  # or deepseek-coder
+python run_pipeline.py --stage practice --limit 10
+```
+
+Or any OpenAI-compatible API:
+```bash
+export LLM_API_KEY="sk-..."
+export LLM_MODEL="your-model"
+export LLM_BASE_URL="https://api.your-provider.com/v1"
+python run_pipeline.py --stage practice --limit 10
+```
+
+**Test your setup:**
+```bash
+python test_llm.py
+```
+
+**LLM Provider Pricing (approximate):**
+| Provider | Model | Input | Output | Cost per 1K functions* |
+|----------|-------|-------|--------|------------------------|
+| OpenAI | gpt-4o-mini | $0.15/M | $0.60/M | ~$0.05-0.10 |
+| OpenAI | gpt-4o | $2.50/M | $10.00/M | ~$0.80-1.50 |
+| DeepSeek | deepseek-chat | $0.14/M | $0.28/M | ~$0.04-0.08 |
+| DeepSeek | deepseek-coder | $0.14/M | $0.28/M | ~$0.04-0.08 |
+
+*Assuming ~500 tokens per function on average. DeepSeek is ~5-10x cheaper!
+
+Without API key, falls back to signature + docstring + dependencies.
 
 **Usage:**
 ```python

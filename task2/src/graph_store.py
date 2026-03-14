@@ -143,7 +143,10 @@ class CodeGraph:
             logger.warning(f"Source node not found: {source_id}")
             return
         if not self.graph.has_node(target_id):
-            logger.warning(f"Target node not found: {target_id}")
+            # Don't warn for external modules (they're expected to not exist)
+            # Only warn for internal entity references
+            if not target_id.startswith('module:'):
+                logger.warning(f"Target node not found: {target_id}")
             return
         
         self.graph.add_edge(

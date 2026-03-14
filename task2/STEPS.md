@@ -34,6 +34,16 @@
 - DenseVectorStore with FAISS fallback to numpy
 - SimpleBM25 fallback when rank-bm25 not available
 - HybridRetriever combining both with α parameter
+
+### 2.2 LLM Abstraction (llm_abstraction.py) - NEW
+- LLMAbstractor: Supports OpenAI, DeepSeek, or any OpenAI-compatible API
+- CachedLLMAbstractor: Batching and caching for efficiency
+- **CACHING**: Abstracts cached by code hash (MD5) - NEVER regenerated for same code
+- Prompt: "Summarize in 1-2 sentences + list dependencies"
+- Falls back to signature+docstring+dependencies if no API key
+- **DeepSeek support**: Set `DEEPSEEK_API_KEY` and `LLM_MODEL=deepseek-chat`
+- Test script: `python test_llm.py`
+- Cache checker: `python check_cache.py`
 - Reciprocal Rank Fusion for combining scores
 
 ### 2.2 Testing
@@ -51,6 +61,7 @@
 - Token budget management
 - QueryBuilder for extracting search terms
 - **Ascending relevance order** (critical for left-truncation)
+- **FIXED**: Use abstracts (signature + docstring) for retrieved seeds (not full code)
 
 ### 3.2 Testing
 - test_phase3.py with 8 test cases
@@ -115,11 +126,14 @@ Output format verified:
 
 ## Documentation
 
-- AGENTS.md: Comprehensive project guide (updated with bug fixes)
-- docs/RESEARCH_NOTES.md: Competition research summary
+- **QUICKSTART.md**: Quick reference card
+- **README.md**: Comprehensive user guide with 3 usage options
+- **docs/COMPARISON_TO_BASELINE.md**: Detailed comparison with BM25 baseline
+- **docs/LLM_CACHING.md**: Caching system documentation
+- **docs/IMPLEMENTATION_SUMMARY.md**: Technical implementation summary
+- AGENTS.md: Developer guide
+- docs/RESEARCH_NOTES.md: Competition research
 - docs/PHASE1_DESIGN.md through docs/PHASE6_DESIGN.md: Design docs
-- docs/IMPLEMENTATION_SUMMARY.md: Complete summary
-- README.md: User guide
 - STEPS.md: This file
 
 ## Current Status
