@@ -2,6 +2,9 @@
 Heat Pump Grid Load Prediction — Task 3
 Predicts monthly average x2 for 600 heat pumps, May-Oct 2025.
 Trained on Oct 2024 – Apr 2025 (winter → summer OOD extrapolation).
+
+x2 is min-max normalized to [0,1]. Target MAE <= 0.01.
+Key insight: monthly avg x2 winter ~0.20, April ~0.08, summer ~0.02-0.04.
 """
 
 from __future__ import annotations
@@ -24,7 +27,10 @@ load_dotenv()
 DATA_DIR = Path("data")
 OUT_DIR = DATA_DIR / "out"
 WEATHER_CACHE = DATA_DIR / "weather_cache.parquet"
+WEATHER_PARTIAL = DATA_DIR / "weather_partial.parquet"
 SUBMISSION_FILE = OUT_DIR / "submission.csv"
+BATCH_SIZE = 50
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. DATA LOADING & CLEANING
@@ -37,25 +43,14 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
     devices = pl.read_csv(DATA_DIR / "devices.csv")
 
     print("Scanning data.csv (lazy, 10 GB) …")
-    # Columns we actually need — avoids loading the full 10 GB into RAM
     needed_cols = [
-        "deviceId",
-        "timedate",
-        "period",
-        "t1",
-        "t2",
-        "t7",  # external, internal, DHW tank temps (normalized)
-        "x1",
-        "x2",
-        "x3",
-        "deviceType",
+        "deviceId", "timedate", "period",
+        "t1", "t2", "t7",
+        "x1", "x2", "x3", "deviceType",
     ]
 
     lazy = pl.scan_csv(DATA_DIR / "data.csv", try_parse_dates=False)
-    lazy = lazy.select(needed_cols)
-
-    # Parse datetime — strip trailing " UTC" if present
-    lazy = lazy.with_columns(
+    lazy = lazy.select(needed_cols).with_columns(
         pl.col("timedate")
         .str.replace(r" UTC$", "")
         .str.to_datetime("%Y-%m-%d %H:%M:%S", strict=False)
@@ -64,17 +59,16 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
 
     print("Collecting … (this may take a few minutes)")
     df = lazy.collect()
-
     print(f"Loaded {len(df):,} rows")
 
-    # --- Clean x2 --------------------------------------------------------
-    # Remove negative readings
+    # Remove negative x2
     df = df.filter(pl.col("x2").is_null() | (pl.col("x2") >= 0))
 
-    # Winsorize x2 at 99.5th percentile per device (using train period only)
-    train_mask = pl.col("period") == "train"
+    # Winsorize x2 at 99.5th percentile per device (train only)
     p995 = (
-        df.filter(train_mask).group_by("deviceId").agg(pl.col("x2").quantile(0.995).alias("x2_cap"))
+        df.filter(pl.col("period") == "train")
+        .group_by("deviceId")
+        .agg(pl.col("x2").quantile(0.995).alias("x2_cap"))
     )
     df = df.join(p995, on="deviceId", how="left")
     df = df.with_columns(
@@ -85,7 +79,6 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
     ).drop("x2_cap")
 
     # Remove stuck meters: x2 constant for > 24 consecutive readings (2 hrs)
-    # Use a difference flag: mark rows where x2 changes, then count streaks
     df = df.sort(["deviceId", "timedate"])
     df = df.with_columns(
         (pl.col("x2") != pl.col("x2").shift(1).over("deviceId"))
@@ -96,50 +89,37 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
     df = df.with_columns(pl.col("x2_changed").cum_sum().over("deviceId").alias("streak_id"))
     streak_lengths = df.group_by(["deviceId", "streak_id"]).agg(pl.len().alias("streak_len"))
     df = df.join(streak_lengths, on=["deviceId", "streak_id"], how="left")
-    # Keep rows that are either:
-    # - not in a stuck streak (streak_len <= 24)
-    # - or validation/test period (x2 is already NaN, we still need the rows for features)
-    df = df.filter((pl.col("streak_len") <= 24) | (pl.col("period") != "train")).drop(
-        ["x2_changed", "streak_id", "streak_len"]
-    )
+    df = df.filter(
+        (pl.col("streak_len") <= 24) | (pl.col("period") != "train")
+    ).drop(["x2_changed", "streak_id", "streak_len"])
 
     print(f"After cleaning: {len(df):,} rows")
     return df, devices
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. WEATHER FETCHING (Open-Meteo ERA5)
+# 2. WEATHER FETCHING (Open-Meteo ERA5) — optional, falls back to t1
 # ─────────────────────────────────────────────────────────────────────────────
 
-WEATHER_PARTIAL = DATA_DIR / "weather_partial.parquet"
-BATCH_SIZE = 50  # Open-Meteo supports up to 50 locations per request
 
-
-def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
-    """Fetch hourly weather for each unique lat/lon using batched requests. Cached to parquet."""
+def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
+    """Fetch hourly weather for each unique lat/lon. Returns None if unavailable."""
     if WEATHER_CACHE.exists():
         print("Loading cached weather …")
         return pl.read_parquet(WEATHER_CACHE)
 
     print("Fetching weather from Open-Meteo …")
     locations = (
-        devices.with_columns(
-            [
-                pl.col("latitude").round(1),
-                pl.col("longitude").round(1),
-            ]
-        )
+        devices
+        .with_columns([pl.col("latitude").round(1), pl.col("longitude").round(1)])
         .select(["latitude", "longitude"])
         .unique()
         .sort(["latitude", "longitude"])
     )
     all_locs = locations.to_dicts()
     n_total = len(all_locs)
-    print(
-        f"  {n_total} unique locations → {math.ceil(n_total / BATCH_SIZE)} batches of {BATCH_SIZE}"
-    )
+    print(f"  {n_total} unique locations → {math.ceil(n_total / BATCH_SIZE)} batches of {BATCH_SIZE}")
 
-    # Resume from partial cache if it exists
     already_done: set[tuple] = set()
     partial_frames: list[pl.DataFrame] = []
     if WEATHER_PARTIAL.exists():
@@ -150,7 +130,7 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
         print(f"  Resuming: {len(already_done)} locations already cached")
 
     remaining = [loc for loc in all_locs if (loc["latitude"], loc["longitude"]) not in already_done]
-    batches = [remaining[i : i + BATCH_SIZE] for i in range(0, len(remaining), BATCH_SIZE)]
+    batches = [remaining[i: i + BATCH_SIZE] for i in range(0, len(remaining), BATCH_SIZE)]
 
     for batch_i, batch in enumerate(batches):
         lats = [loc["latitude"] for loc in batch]
@@ -176,12 +156,12 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
                 )
             except requests.RequestException as e:
                 print(f"    Request error: {e}, retry {attempt + 1}/10 …")
-                time.sleep(min(10 * (2**attempt), 120))
+                time.sleep(min(10 * (2 ** attempt), 120))
                 continue
 
             if resp.status_code == 200:
                 break
-            wait = min(10 * (2**attempt), 120)
+            wait = min(10 * (2 ** attempt), 120)
             print(f"    HTTP {resp.status_code}, waiting {wait}s, retry {attempt + 1}/10 …")
             time.sleep(wait)
 
@@ -190,7 +170,6 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
             continue
 
         body = resp.json()
-        # Multi-location response is a list; single location is a dict
         location_results = body if isinstance(body, list) else [body]
 
         records: list[dict] = []
@@ -202,32 +181,23 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
             humid = hourly.get("relative_humidity_2m", [None] * len(times))
             wind = hourly.get("wind_speed_10m", [None] * len(times))
             for t, te, so, hu, wi in zip(times, temps, solar, humid, wind):
-                records.append(
-                    {
-                        "latitude": lat,
-                        "longitude": lon,
-                        "hour": t,
-                        "temp_2m": te,
-                        "solar_rad": so,
-                        "humidity": hu,
-                        "wind_speed": wi,
-                    }
-                )
+                records.append({
+                    "latitude": lat, "longitude": lon, "hour": t,
+                    "temp_2m": te, "solar_rad": so, "humidity": hu, "wind_speed": wi,
+                })
 
         batch_df = pl.DataFrame(records).with_columns(
             pl.col("hour").str.to_datetime("%Y-%m-%dT%H:%M", strict=False)
         )
         partial_frames.append(batch_df)
-
-        # Save incremental progress after each batch
         combined = pl.concat(partial_frames)
         DATA_DIR.mkdir(exist_ok=True)
         combined.write_parquet(WEATHER_PARTIAL)
-
         time.sleep(5)
 
     if not partial_frames:
-        raise RuntimeError("No weather data fetched — all batches failed")
+        print("  WARNING: No weather data fetched — will use t1-based fallback")
+        return None
 
     weather = pl.concat(partial_frames)
     weather.write_parquet(WEATHER_CACHE)
@@ -239,24 +209,13 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
 
 def join_weather(df: pl.DataFrame, devices: pl.DataFrame, weather: pl.DataFrame) -> pl.DataFrame:
     """Join weather to device telemetry by nearest lat/lon and hour."""
-    # Round device coords to match weather grid
-    devices_rounded = devices.with_columns(
-        [
-            pl.col("latitude").round(1),
-            pl.col("longitude").round(1),
-        ]
-    )
-
+    devices_rounded = devices.with_columns([
+        pl.col("latitude").round(1),
+        pl.col("longitude").round(1),
+    ])
     df = df.join(devices_rounded, on="deviceId", how="left")
-
-    # Truncate timedate to hour for join
     df = df.with_columns(pl.col("timedate").dt.truncate("1h").alias("hour"))
-
-    df = df.join(
-        weather,
-        on=["latitude", "longitude", "hour"],
-        how="left",
-    )
+    df = df.join(weather, on=["latitude", "longitude", "hour"], how="left")
     return df.drop("hour")
 
 
@@ -268,85 +227,89 @@ def join_weather(df: pl.DataFrame, devices: pl.DataFrame, weather: pl.DataFrame)
 def day_length(lat_deg: float, doy: int) -> float:
     """Astronomical day length in hours for a given latitude and day-of-year."""
     lat_rad = math.radians(lat_deg)
-    # Solar declination (radians)
     decl = math.radians(-23.45 * math.cos(math.radians(360 / 365 * (doy + 10))))
-    cos_ha = -math.tan(lat_rad) * math.tan(decl)
-    cos_ha = max(-1.0, min(1.0, cos_ha))
+    cos_ha = max(-1.0, min(1.0, -math.tan(lat_rad) * math.tan(decl)))
     return (2 / 15) * math.degrees(math.acos(cos_ha))
 
 
-def add_physics_features(df: pl.DataFrame) -> pl.DataFrame:
-    """Add thermodynamic features using absolute Open-Meteo temperatures."""
-    T_base_heat_15 = 15.0
-    T_base_heat_18 = 18.0
-    T_base_cool_22 = 22.0
-    T_base_cool_24 = 24.0
-    T_indoor_estimate = 20.0  # assumed indoor setpoint °C
+def add_physics_features(df: pl.DataFrame, has_weather: bool) -> pl.DataFrame:
+    """Add thermodynamic features. Falls back to t1-derived approx if no weather."""
+    T_base15 = 15.0
+    T_base18 = 18.0
+    T_cool22 = 22.0
+    T_cool24 = 24.0
+    T_indoor = 20.0
 
-    df = df.with_columns(
-        [
-            # Degree days (computed per 5-min row, will be summed daily)
-            (pl.lit(T_base_heat_15) - pl.col("temp_2m")).clip(lower_bound=0).alias("hdd15_5min"),
-            (pl.lit(T_base_heat_18) - pl.col("temp_2m")).clip(lower_bound=0).alias("hdd18_5min"),
-            (pl.col("temp_2m") - pl.lit(T_base_cool_22)).clip(lower_bound=0).alias("cdd22_5min"),
-            (pl.col("temp_2m") - pl.lit(T_base_cool_24)).clip(lower_bound=0).alias("cdd24_5min"),
-            # Inverse COP proxy: approaches 0 as outdoor temp → indoor setpoint
-            ((pl.lit(T_indoor_estimate) - pl.col("temp_2m")) / pl.lit(T_indoor_estimate))
-            .clip(lower_bound=0)
-            .alias("inv_cop"),
-            # Date parts
-            pl.col("timedate").dt.date().alias("date"),
-            pl.col("timedate").dt.year().alias("year"),
-            pl.col("timedate").dt.month().alias("month"),
-            pl.col("timedate").dt.ordinal_day().alias("doy"),
-        ]
-    )
+    if has_weather:
+        # Use absolute Open-Meteo temperatures
+        temp_col = pl.col("temp_2m")
+    else:
+        # Fallback: rescale normalized t1 → approximate °C
+        # Polish range roughly -10°C to 25°C → t1 in [0, 1]
+        temp_col = pl.col("t1") * 35.0 - 10.0
+        # Add dummy weather columns so downstream code doesn't break
+        df = df.with_columns([
+            (pl.col("t1") * 35.0 - 10.0).alias("temp_2m"),
+            pl.lit(None).cast(pl.Float64).alias("solar_rad"),
+            pl.lit(None).cast(pl.Float64).alias("humidity"),
+            pl.lit(None).cast(pl.Float64).alias("wind_speed"),
+        ])
+
+    df = df.with_columns([
+        (pl.lit(T_base15) - temp_col).clip(lower_bound=0).alias("hdd15_5min"),
+        (pl.lit(T_base18) - temp_col).clip(lower_bound=0).alias("hdd18_5min"),
+        (temp_col - pl.lit(T_cool22)).clip(lower_bound=0).alias("cdd22_5min"),
+        (temp_col - pl.lit(T_cool24)).clip(lower_bound=0).alias("cdd24_5min"),
+        ((pl.lit(T_indoor) - temp_col) / pl.lit(T_indoor)).clip(lower_bound=0).alias("inv_cop"),
+        pl.col("timedate").dt.date().alias("date"),
+        pl.col("timedate").dt.year().alias("year"),
+        pl.col("timedate").dt.month().alias("month"),
+        pl.col("timedate").dt.ordinal_day().alias("doy"),
+    ])
     return df
 
 
 def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
     """Compress 5-minute rows to one row per (deviceId, date)."""
-    # Compute load proxy: HDD15 × inv_COP (the extrapolation secret weapon)
-    df = df.with_columns((pl.col("hdd15_5min") * pl.col("inv_cop")).alias("load_proxy_5min"))
-
-    daily = df.group_by(["deviceId", "date"]).agg(
-        [
-            # Target (NaN for validation/test)
-            pl.col("x2").mean().alias("x2_mean"),
-            pl.col("x2").median().alias("x2_median"),
-            # Period
-            pl.col("period").first().alias("period"),
-            pl.col("year").first().alias("year"),
-            pl.col("month").first().alias("month"),
-            pl.col("doy").first().alias("doy"),
-            pl.col("latitude").first().alias("latitude"),
-            # Normalized temp stats (relative signals even though not absolute)
-            pl.col("t1").mean().alias("t1_mean"),
-            pl.col("t1").max().alias("t1_max"),
-            pl.col("t1").min().alias("t1_min"),
-            pl.col("t2").mean().alias("t2_mean"),
-            pl.col("t7").mean().alias("t7_mean"),  # DHW tank
-            pl.col("x1").mean().alias("x1_mean"),
-            pl.col("x3").first().alias("x3"),
-            pl.col("deviceType").first().alias("deviceType"),
-            # Absolute weather features
-            pl.col("temp_2m").mean().alias("temp_mean"),
-            pl.col("temp_2m").max().alias("temp_max"),
-            pl.col("temp_2m").min().alias("temp_min"),
-            pl.col("solar_rad").sum().alias("solar_sum"),
-            pl.col("humidity").mean().alias("humidity_mean"),
-            pl.col("wind_speed").mean().alias("wind_mean"),
-            # Physics features (convert 5-min means → daily sums / 12 for degree-day equivalents)
-            (pl.col("hdd15_5min").sum() / 288).alias("HDD_15"),  # 288 readings/day
-            (pl.col("hdd18_5min").sum() / 288).alias("HDD_18"),
-            (pl.col("cdd22_5min").sum() / 288).alias("CDD_22"),
-            (pl.col("cdd24_5min").sum() / 288).alias("CDD_24"),
-            pl.col("inv_cop").mean().alias("inv_cop"),
-            (pl.col("load_proxy_5min").sum() / 288).alias("load_proxy"),  # HDD15 × inv_COP
-        ]
+    df = df.with_columns(
+        (pl.col("hdd15_5min") * pl.col("inv_cop")).alias("load_proxy_5min")
     )
 
-    # Day length per (latitude, doy)
+    # Join lat if not already present
+    if "latitude" not in df.columns:
+        df = df.join(devices.select(["deviceId", "latitude"]), on="deviceId", how="left")
+
+    daily = df.group_by(["deviceId", "date"]).agg([
+        pl.col("x2").mean().alias("x2_mean"),
+        pl.col("x2").median().alias("x2_median"),
+        pl.col("period").first().alias("period"),
+        pl.col("year").first().alias("year"),
+        pl.col("month").first().alias("month"),
+        pl.col("doy").first().alias("doy"),
+        pl.col("latitude").first().alias("latitude"),
+        pl.col("t1").mean().alias("t1_mean"),
+        pl.col("t1").max().alias("t1_max"),
+        pl.col("t1").min().alias("t1_min"),
+        pl.col("t2").mean().alias("t2_mean"),
+        pl.col("t7").mean().alias("t7_mean"),
+        pl.col("x1").mean().alias("x1_mean"),
+        pl.col("x3").first().alias("x3"),
+        pl.col("deviceType").first().alias("deviceType"),
+        pl.col("temp_2m").mean().alias("temp_mean"),
+        pl.col("temp_2m").max().alias("temp_max"),
+        pl.col("temp_2m").min().alias("temp_min"),
+        pl.col("solar_rad").sum().alias("solar_sum"),
+        pl.col("humidity").mean().alias("humidity_mean"),
+        pl.col("wind_speed").mean().alias("wind_mean"),
+        (pl.col("hdd15_5min").sum() / 288).alias("HDD_15"),
+        (pl.col("hdd18_5min").sum() / 288).alias("HDD_18"),
+        (pl.col("cdd22_5min").sum() / 288).alias("CDD_22"),
+        (pl.col("cdd24_5min").sum() / 288).alias("CDD_24"),
+        pl.col("inv_cop").mean().alias("inv_cop"),
+        (pl.col("load_proxy_5min").sum() / 288).alias("load_proxy"),
+    ])
+
+    # Astronomical day length
     daily = daily.with_columns(
         pl.struct(["latitude", "doy"])
         .map_elements(
@@ -356,9 +319,10 @@ def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
         .alias("day_length")
     )
 
-    # Heating season flag: temp_mean < 15°C for 3+ consecutive days per device
     daily = daily.sort(["deviceId", "date"])
-    daily = daily.with_columns((pl.col("temp_mean") < 15.0).cast(pl.Int32).alias("cold_day"))
+    daily = daily.with_columns(
+        (pl.col("temp_mean") < 15.0).cast(pl.Int32).alias("cold_day")
+    )
     daily = daily.with_columns(
         (
             pl.col("cold_day")
@@ -370,7 +334,7 @@ def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
         (pl.col("cold_streak") >= 3).cast(pl.Int32).alias("is_heating_season")
     ).drop(["cold_day", "cold_streak"])
 
-    # Sample weight: upweight warm training days (pseudo-summer proxy)
+    # Upweight warm training days (pseudo-summer proxy, 3x weight)
     daily = daily.with_columns(
         pl.when((pl.col("period") == "train") & (pl.col("temp_mean") > 15.0))
         .then(3.0)
@@ -382,50 +346,277 @@ def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. MODEL TRAINING
+# 4. PER-DEVICE MONTHLY TRAINING PROFILE
 # ─────────────────────────────────────────────────────────────────────────────
 
-FEATURE_COLS = [
-    "temp_mean",
-    "temp_max",
-    "temp_min",
-    "HDD_15",
-    "HDD_18",
-    "CDD_22",
-    "CDD_24",
-    "inv_cop",
-    "load_proxy",
-    "solar_sum",
-    "humidity_mean",
-    "wind_mean",
-    "day_length",
-    "doy",
-    "month",
-    "is_heating_season",
-    "t1_mean",
-    "t1_max",
-    "t1_min",
-    "t2_mean",
-    "t7_mean",
-    "x1_mean",
-    "x3",
-    "deviceType",
+
+def compute_device_monthly_profile(daily: pl.DataFrame) -> pl.DataFrame:
+    """
+    Compute per-device monthly mean x2 from training data.
+    This is the single most important anchor for summer predictions:
+    - Oct 2025 ≈ Oct 2024 (same seasonal conditions)
+    - May-Sep should trend down from April
+    """
+    train = daily.filter(pl.col("period") == "train")
+
+    # Correct monthly average: mean over ALL 5-min readings in that month
+    # We approximate this as mean of daily means (close enough, daily rows are equally sized)
+    profile = (
+        train.group_by(["deviceId", "month"])
+        .agg(pl.col("x2_mean").mean().alias("x2_monthly_mean"))
+        .sort(["deviceId", "month"])
+    )
+
+    # Pivot to wide format: one row per device, columns = month_1 ... month_12
+    profile_wide = profile.pivot(
+        on="month", index="deviceId", values="x2_monthly_mean", aggregate_function="mean"
+    )
+    # Rename columns to m_1, m_2 ... for clarity
+    rename_map = {str(m): f"m_{m}" for m in range(1, 13)}
+    for old, new in rename_map.items():
+        if old in profile_wide.columns:
+            profile_wide = profile_wide.rename({old: new})
+
+    # Per-device device-type and x3 (static features)
+    device_meta = (
+        train.group_by("deviceId")
+        .agg([
+            pl.col("x3").first().alias("x3"),
+            pl.col("deviceType").first().alias("deviceType"),
+            pl.col("x2_mean").mean().alias("x2_train_mean"),
+            pl.col("x2_mean").std().alias("x2_train_std"),
+        ])
+    )
+    profile_wide = profile_wide.join(device_meta, on="deviceId", how="left")
+    return profile_wide
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. MODEL A — PER-DEVICE TREND EXTRAPOLATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def predict_trend_extrapolation(
+    profile: pl.DataFrame,
+    target_months: list[int],
+) -> pl.DataFrame:
+    """
+    Simple per-device trend-based extrapolation:
+    - Oct 2025 = Oct 2024 (calibration anchor)
+    - May-Sep = decaying fraction of April value, shaped by device group median
+    Key insight: summer load ≈ DHW-only baseload, which is ~25-50% of April load.
+    """
+    rows = []
+    profile_np = profile.to_pandas()
+
+    # Group medians by (deviceType, x3) for robustness
+    group_apr = {}
+    for _, grp in profile_np.groupby(["deviceType", "x3"]):
+        key = (grp["deviceType"].iloc[0], grp["x3"].iloc[0])
+        apr_val = grp.get("m_4", None)
+        if apr_val is not None:
+            group_apr[key] = float(apr_val.median()) if hasattr(apr_val, "median") else float(apr_val.iloc[0])
+
+    # Summer decay factors relative to April (physics-informed)
+    # Based on typical Polish heat pump seasonal patterns
+    decay = {5: 0.55, 6: 0.38, 7: 0.30, 8: 0.30, 9: 0.38, 10: 1.00}
+
+    for _, row in profile_np.iterrows():
+        device_id = row["deviceId"]
+        apr = row.get("m_4", np.nan)
+        oct24 = row.get("m_10", np.nan)
+        dt = row.get("deviceType", -1)
+        x3 = row.get("x3", -1)
+
+        # Fallback if device has no April data
+        group_key = (dt, x3)
+        if np.isnan(apr) or apr == 0:
+            apr = group_apr.get(group_key, 0.05)
+
+        if np.isnan(oct24) or oct24 == 0:
+            oct24 = group_apr.get(group_key, apr)
+
+        for m in target_months:
+            if m == 10:
+                pred = oct24  # Direct anchor
+            else:
+                pred = apr * decay.get(m, 0.35)
+            rows.append({"deviceId": device_id, "month": m, "pred_trend": max(pred, 0.0)})
+
+    return pl.DataFrame(rows)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. MODEL B — GLOBAL LIGHTGBM ON MONTHLY DATA
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def build_monthly_features(daily: pl.DataFrame) -> pl.DataFrame:
+    """
+    Aggregate daily data to monthly level per device.
+    Training: ~600 devices x 7 months = ~4200 rows.
+    This is the correct granularity for the target (monthly mean x2).
+    """
+    monthly = (
+        daily.group_by(["deviceId", "year", "month"])
+        .agg([
+            pl.col("x2_mean").mean().alias("x2_monthly"),
+            pl.col("period").first().alias("period"),
+            pl.col("temp_mean").mean().alias("temp_mean_monthly"),
+            pl.col("temp_mean").min().alias("temp_min_monthly"),
+            pl.col("HDD_15").sum().alias("HDD_15_monthly"),
+            pl.col("HDD_18").sum().alias("HDD_18_monthly"),
+            pl.col("CDD_22").sum().alias("CDD_22_monthly"),
+            pl.col("load_proxy").sum().alias("load_proxy_monthly"),
+            pl.col("solar_sum").sum().alias("solar_monthly"),
+            pl.col("day_length").mean().alias("day_length_monthly"),
+            pl.col("inv_cop").mean().alias("inv_cop_monthly"),
+            pl.col("t1_mean").mean().alias("t1_mean_monthly"),
+            pl.col("x3").first().alias("x3"),
+            pl.col("deviceType").first().alias("deviceType"),
+            pl.col("is_heating_season").mean().alias("frac_heating_season"),
+            pl.col("sample_weight").mean().alias("sample_weight"),
+        ])
+    )
+    return monthly.sort(["deviceId", "year", "month"])
+
+
+MONTHLY_FEATURE_COLS = [
+    "month", "temp_mean_monthly", "temp_min_monthly",
+    "HDD_15_monthly", "HDD_18_monthly", "CDD_22_monthly",
+    "load_proxy_monthly", "solar_monthly", "day_length_monthly",
+    "inv_cop_monthly", "t1_mean_monthly", "frac_heating_season",
+    "x3", "deviceType",
 ]
 
-# monotone constraint: load_proxy (index ~8) must be >= 0 trend with load
-# temp_mean (index 0): higher temp → lower heating load → constraint -1
-# All others: 0 (unconstrained)
-MONOTONE = [0] * len(FEATURE_COLS)
-MONOTONE[FEATURE_COLS.index("temp_mean")] = -1  # higher outdoor temp → lower load
-MONOTONE[FEATURE_COLS.index("load_proxy")] = 1  # higher load_proxy → higher load
-MONOTONE[FEATURE_COLS.index("HDD_15")] = 1  # more heating days → higher load
-MONOTONE[FEATURE_COLS.index("HDD_18")] = 1
+MONTHLY_MONOTONE = [0] * len(MONTHLY_FEATURE_COLS)
+MONTHLY_MONOTONE[MONTHLY_FEATURE_COLS.index("temp_mean_monthly")] = -1
+MONTHLY_MONOTONE[MONTHLY_FEATURE_COLS.index("HDD_15_monthly")] = 1
+MONTHLY_MONOTONE[MONTHLY_FEATURE_COLS.index("load_proxy_monthly")] = 1
 
-LGB_PARAMS = {
-    "objective": "huber",  # supports monotone_constraints; small delta ≈ L1/MAE
+LGB_MONTHLY_PARAMS = {
+    "objective": "huber",
+    "huber_delta": 0.5,
+    "linear_tree": True,
+    "monotone_constraints": MONTHLY_MONOTONE,
+    "metric": "mae",
+    "num_leaves": 15,
+    "learning_rate": 0.03,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 5,
+    "min_child_samples": 10,
+    "verbose": -1,
+    "n_jobs": -1,
+}
+
+
+def get_monthly_cv_folds(monthly: pl.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Temporal forward-chaining CV at monthly granularity."""
+    month_col = monthly["month"].to_numpy()
+    is_winter = (month_col >= 10) | (month_col <= 1)
+    folds = [
+        (is_winter, month_col == 2),
+        (is_winter | (month_col == 2), month_col == 3),
+        (is_winter | (month_col == 2) | (month_col == 3), month_col == 4),
+    ]
+    result = []
+    for train_mask, val_mask in folds:
+        ti = np.where(train_mask)[0]
+        vi = np.where(val_mask)[0]
+        if len(ti) > 0 and len(vi) > 0:
+            result.append((ti, vi))
+    return result
+
+
+def train_monthly_lgb(monthly: pl.DataFrame) -> list[lgb.Booster]:
+    """Train LightGBM on monthly aggregated data."""
+    train_monthly = monthly.filter(pl.col("period") == "train").fill_null(0)
+    X = train_monthly.select(MONTHLY_FEATURE_COLS).to_numpy().astype(np.float32)
+    y = train_monthly["x2_monthly"].to_numpy().astype(np.float64)
+    w = train_monthly["sample_weight"].to_numpy().astype(np.float64)
+
+    folds = get_monthly_cv_folds(train_monthly)
+    print(f"  Monthly CV folds: {len(folds)}, train size: {len(y)}")
+
+    models = []
+    for fold_i, (ti, vi) in enumerate(folds):
+        dtrain = lgb.Dataset(X[ti], label=y[ti], weight=w[ti],
+                             feature_name=MONTHLY_FEATURE_COLS, free_raw_data=False)
+        dval = lgb.Dataset(X[vi], label=y[vi], reference=dtrain)
+        model = lgb.train(
+            LGB_MONTHLY_PARAMS,
+            dtrain,
+            num_boost_round=800,
+            valid_sets=[dval],
+            callbacks=[lgb.early_stopping(80, verbose=False), lgb.log_evaluation(0)],
+        )
+        val_mae = np.mean(np.abs(model.predict(X[vi]) - y[vi]))
+        print(f"  Monthly LGB Fold {fold_i + 1} MAE={val_mae:.4f}")
+        models.append(model)
+
+    return models
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. MODEL C — PER-DEVICE PHYSICS BASELINE (OLS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def fit_physics_baseline(monthly: pl.DataFrame) -> pl.DataFrame:
+    """
+    Per-device OLS on monthly data: monthly_x2 ~ HDD_15 + 1
+    Returns deviceId, htc (HDD coefficient), dhw_baseload (intercept).
+    """
+    train_monthly = monthly.filter(pl.col("period") == "train").fill_null(0)
+    results = []
+    for device_id, grp in train_monthly.group_by("deviceId"):
+        hdd = grp["HDD_15_monthly"].to_numpy()
+        x2 = grp["x2_monthly"].to_numpy()
+        mask = np.isfinite(x2) & np.isfinite(hdd)
+        if mask.sum() < 3:
+            results.append({
+                "deviceId": device_id[0],
+                "htc": 0.0,
+                "dhw_baseload": float(np.nanmedian(x2)),
+            })
+            continue
+        A = np.column_stack([hdd[mask], np.ones(mask.sum())])
+        coef, _, _, _ = np.linalg.lstsq(A, x2[mask], rcond=None)
+        results.append({
+            "deviceId": device_id[0],
+            "htc": max(float(coef[0]), 0.0),
+            "dhw_baseload": max(float(coef[1]), 0.0),
+        })
+    return pl.DataFrame(results)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. DAILY-LEVEL LIGHTGBM (for devices with weather data)
+# ─────────────────────────────────────────────────────────────────────────────
+
+DAILY_FEATURE_COLS = [
+    "temp_mean", "temp_max", "temp_min",
+    "HDD_15", "HDD_18", "CDD_22", "CDD_24",
+    "inv_cop", "load_proxy",
+    "solar_sum", "humidity_mean", "wind_mean",
+    "day_length", "doy", "month",
+    "is_heating_season",
+    "t1_mean", "t1_max", "t1_min", "t2_mean", "t7_mean",
+    "x1_mean", "x3", "deviceType",
+]
+
+DAILY_MONOTONE = [0] * len(DAILY_FEATURE_COLS)
+DAILY_MONOTONE[DAILY_FEATURE_COLS.index("temp_mean")] = -1
+DAILY_MONOTONE[DAILY_FEATURE_COLS.index("load_proxy")] = 1
+DAILY_MONOTONE[DAILY_FEATURE_COLS.index("HDD_15")] = 1
+DAILY_MONOTONE[DAILY_FEATURE_COLS.index("HDD_18")] = 1
+
+LGB_DAILY_PARAMS = {
+    "objective": "huber",
     "huber_delta": 1.0,
     "linear_tree": True,
-    "monotone_constraints": MONOTONE,
+    "monotone_constraints": DAILY_MONOTONE,
     "metric": "mae",
     "num_leaves": 31,
     "learning_rate": 0.05,
@@ -437,273 +628,226 @@ LGB_PARAMS = {
     "n_jobs": -1,
 }
 
-PHYSICS_FEATURES = [
-    "HDD_15",
-    "HDD_18",
-    "CDD_22",
-    "CDD_24",
-    "load_proxy",
-    "day_length",
-    "solar_sum",
-    "temp_mean",
-    "inv_cop",
-    "x3",
-    "deviceType",
-    "month",
+DAILY_PHYSICS_FEATURES = [
+    "HDD_15", "HDD_18", "CDD_22", "CDD_24",
+    "load_proxy", "day_length", "solar_sum",
+    "temp_mean", "inv_cop", "x3", "deviceType", "month",
 ]
 
 
-def get_cv_folds(daily_train: pl.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Temporal forward-chaining CV on training data."""
+def get_daily_cv_folds(daily_train: pl.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
     month_col = daily_train["month"].to_numpy()
-    # Training spans Oct(10), Nov(11), Dec(12), Jan(1), Feb(2), Mar(3), Apr(4)
-    # Must include Oct-Dec in every training fold
-    is_winter = (month_col >= 10) | (month_col <= 1)  # Oct, Nov, Dec, Jan
+    is_winter = (month_col >= 10) | (month_col <= 1)
     folds = [
-        # Fold 1: Oct–Jan → Feb
         (is_winter, month_col == 2),
-        # Fold 2: Oct–Feb → Mar
         (is_winter | (month_col == 2), month_col == 3),
-        # Fold 3: Oct–Mar → Apr (most important: heating wind-down)
         (is_winter | (month_col == 2) | (month_col == 3), month_col == 4),
     ]
     result = []
     for train_mask, val_mask in folds:
-        train_idx = np.where(train_mask)[0]
-        val_idx = np.where(val_mask)[0]
-        if len(train_idx) > 0 and len(val_idx) > 0:
-            result.append((train_idx, val_idx))
+        ti, vi = np.where(train_mask)[0], np.where(val_mask)[0]
+        if len(ti) > 0 and len(vi) > 0:
+            result.append((ti, vi))
     return result
 
 
-def train_models(daily: pl.DataFrame) -> dict:
-    """Train LightGBM (raw + log) and Ridge models using temporal CV."""
+def train_daily_models(daily: pl.DataFrame) -> dict:
+    """Train daily-level LightGBM + Ridge models."""
     train_df = daily.filter(pl.col("period") == "train").fill_null(0)
-    X = train_df.select(FEATURE_COLS).to_numpy().astype(np.float32)
+    X = train_df.select(DAILY_FEATURE_COLS).to_numpy().astype(np.float32)
     y = train_df["x2_mean"].to_numpy().astype(np.float64)
     w = train_df["sample_weight"].to_numpy().astype(np.float64)
 
-    folds = get_cv_folds(train_df)
-    print(f"CV folds: {len(folds)}")
+    folds = get_daily_cv_folds(train_df)
+    print(f"  Daily CV folds: {len(folds)}, train size: {len(y)}")
 
-    models_lgb = []
-    models_lgb_log = []
-    models_ridge = []
+    models_lgb, models_lgb_log, models_ridge = [], [], []
+    phys_idx = [DAILY_FEATURE_COLS.index(f) for f in DAILY_PHYSICS_FEATURES]
 
-    for fold_i, (train_idx, val_idx) in enumerate(folds):
-        X_tr, y_tr, w_tr = X[train_idx], y[train_idx], w[train_idx]
-        X_val, y_val = X[val_idx], y[val_idx]
+    for fold_i, (ti, vi) in enumerate(folds):
+        X_tr, y_tr, w_tr = X[ti], y[ti], w[ti]
+        X_val, y_val = X[vi], y[vi]
 
-        # Model A: LightGBM raw x2
-        dtrain = lgb.Dataset(
-            X_tr, label=y_tr, weight=w_tr, feature_name=FEATURE_COLS, free_raw_data=False
-        )
+        dtrain = lgb.Dataset(X_tr, label=y_tr, weight=w_tr,
+                             feature_name=DAILY_FEATURE_COLS, free_raw_data=False)
         dval = lgb.Dataset(X_val, label=y_val, reference=dtrain)
-        lgb_model = lgb.train(
-            LGB_PARAMS,
-            dtrain,
-            num_boost_round=500,
-            valid_sets=[dval],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
-        )
-        val_pred = lgb_model.predict(X_val)
-        val_mae = np.mean(np.abs(val_pred - y_val))
-        print(f"  Fold {fold_i + 1} LGB raw MAE={val_mae:.4f} (n_val={len(y_val)})")
-        models_lgb.append(lgb_model)
+        m = lgb.train(LGB_DAILY_PARAMS, dtrain, num_boost_round=500,
+                      valid_sets=[dval],
+                      callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)])
+        print(f"  Daily LGB raw  Fold {fold_i+1} MAE={np.mean(np.abs(m.predict(X_val)-y_val)):.4f}")
+        models_lgb.append(m)
 
-        # Model B: LightGBM on log1p(x2)
-        y_tr_log = np.log1p(np.maximum(y_tr, 0))
-        dtrain_log = lgb.Dataset(
-            X_tr, label=y_tr_log, weight=w_tr, feature_name=FEATURE_COLS, free_raw_data=False
-        )
-        y_val_log = np.log1p(np.maximum(y_val, 0))
-        dval_log = lgb.Dataset(X_val, label=y_val_log, reference=dtrain_log)
-        lgb_log_model = lgb.train(
-            LGB_PARAMS,
-            dtrain_log,
-            num_boost_round=500,
-            valid_sets=[dval_log],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
-        )
-        val_pred_log = np.expm1(lgb_log_model.predict(X_val))
-        val_mae_log = np.mean(np.abs(val_pred_log - y_val))
-        print(f"  Fold {fold_i + 1} LGB log MAE={val_mae_log:.4f}")
-        models_lgb_log.append(lgb_log_model)
+        y_log = np.log1p(np.maximum(y_tr, 0))
+        dtl = lgb.Dataset(X_tr, label=y_log, weight=w_tr,
+                          feature_name=DAILY_FEATURE_COLS, free_raw_data=False)
+        dvl = lgb.Dataset(X_val, label=np.log1p(np.maximum(y_val, 0)), reference=dtl)
+        ml = lgb.train(LGB_DAILY_PARAMS, dtl, num_boost_round=500,
+                       valid_sets=[dvl],
+                       callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)])
+        p_log = np.expm1(np.maximum(ml.predict(X_val), 0))
+        print(f"  Daily LGB log  Fold {fold_i+1} MAE={np.mean(np.abs(p_log-y_val)):.4f}")
+        models_lgb_log.append(ml)
 
-        # Model C: Ridge on physics features (linear extrapolation backbone)
-        phys_idx = [FEATURE_COLS.index(f) for f in PHYSICS_FEATURES]
-        X_tr_ph = X_tr[:, phys_idx]
-        X_val_ph = X_val[:, phys_idx]
         scaler = StandardScaler()
-        X_tr_scaled = scaler.fit_transform(X_tr_ph)
-        X_val_scaled = scaler.transform(X_val_ph)
+        Xp_tr = scaler.fit_transform(X_tr[:, phys_idx])
         ridge = Ridge(alpha=1.0)
-        ridge.fit(X_tr_scaled, y_tr, sample_weight=w_tr)
-        val_pred_ridge = ridge.predict(X_val_scaled)
-        val_mae_ridge = np.mean(np.abs(val_pred_ridge - y_val))
-        print(f"  Fold {fold_i + 1} Ridge MAE={val_mae_ridge:.4f}")
+        ridge.fit(Xp_tr, y_tr, sample_weight=w_tr)
+        p_r = ridge.predict(scaler.transform(X_val[:, phys_idx]))
+        print(f"  Ridge          Fold {fold_i+1} MAE={np.mean(np.abs(p_r-y_val)):.4f}")
         models_ridge.append((scaler, ridge))
 
-    return {
-        "lgb": models_lgb,
-        "lgb_log": models_lgb_log,
-        "ridge": models_ridge,
-    }
+    return {"lgb": models_lgb, "lgb_log": models_lgb_log, "ridge": models_ridge}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. PHYSICS BASELINE (per-device DHW + heating fit)
+# 9. SUBMISSION — 3-MODEL ENSEMBLE + POST-PROCESSING
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def fit_physics_baseline(daily: pl.DataFrame) -> pl.DataFrame:
-    """
-    Per-device OLS: daily_x2 ~ HDD_15 + 1
-    Estimates building_HTC (HDD coefficient) and DHW_baseload (intercept).
-    Returns a DataFrame with deviceId, htc, dhw_baseload.
-    """
-    train_df = daily.filter(pl.col("period") == "train").fill_null(0)
-    results = []
-    for device_id, grp in train_df.group_by("deviceId"):
-        hdd = grp["HDD_15"].to_numpy()
-        x2 = grp["x2_mean"].to_numpy()
-        mask = np.isfinite(x2) & np.isfinite(hdd)
-        if mask.sum() < 10:
-            results.append(
-                {"deviceId": device_id[0], "htc": 0.0, "dhw_baseload": float(np.nanmedian(x2))}
-            )
-            continue
-        A = np.column_stack([hdd[mask], np.ones(mask.sum())])
-        coef, _, _, _ = np.linalg.lstsq(A, x2[mask], rcond=None)
-        htc = max(coef[0], 0.0)
-        dhw = max(coef[1], 0.0)
-        results.append({"deviceId": device_id[0], "htc": htc, "dhw_baseload": dhw})
-
-    return pl.DataFrame(results)
-
-
-def physics_predict(daily: pl.DataFrame, params: pl.DataFrame) -> pl.Series:
-    """Predict using per-device physics model: htc × HDD_15 + dhw_baseload."""
-    daily_with_params = daily.join(params, on="deviceId", how="left")
-    pred = (
-        daily_with_params["htc"] * daily_with_params["HDD_15"] + daily_with_params["dhw_baseload"]
-    )
-    return pred
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. PREDICTION & SUBMISSION
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def predict_all(daily: pl.DataFrame, trained: dict) -> np.ndarray:
-    """Run all models on the full daily DataFrame, return median ensemble."""
-    X_all = daily.select(FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
-    phys_idx = [FEATURE_COLS.index(f) for f in PHYSICS_FEATURES]
-
-    all_preds = []
-
-    for m in trained["lgb"]:
-        all_preds.append(m.predict(X_all))
-
-    for m in trained["lgb_log"]:
-        all_preds.append(np.expm1(np.maximum(m.predict(X_all), 0)))
-
-    for scaler, ridge in trained["ridge"]:
-        X_ph = X_all[:, phys_idx]
-        X_sc = scaler.transform(X_ph)
-        all_preds.append(np.maximum(ridge.predict(X_sc), 0))
-
-    # Median ensemble across all models & folds
-    ensemble = np.median(np.stack(all_preds, axis=1), axis=1)
-    return ensemble
 
 
 def build_submission(
     daily: pl.DataFrame,
-    trained: dict,
+    monthly: pl.DataFrame,
+    daily_models: dict,
+    monthly_lgb_models: list[lgb.Booster],
     physics_params: pl.DataFrame,
+    profile: pl.DataFrame,
 ) -> pl.DataFrame:
     """
-    Generate submission.csv:
-    1. Predict daily x2 for val+test periods
-    2. Post-process with physics floor and constraints
-    3. Aggregate to monthly averages
+    3-model ensemble:
+      A. Per-device trend extrapolation (Oct anchor + spring/summer decay)
+      B. Monthly LightGBM (global, 4200-row training set)
+      C. Daily LightGBM/Ridge → aggregated to monthly
+
+    Final = median(A, B, C) with post-processing guardrails.
     """
-    predict_periods = ["validation", "test"]
-    pred_df = daily.filter(pl.col("period").is_in(predict_periods))
+    all_devices = daily["deviceId"].unique().to_list()
+    target_months = [5, 6, 7, 8, 9, 10]
+    year = 2025
 
-    X_pred = pred_df.select(FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
-    phys_idx = [FEATURE_COLS.index(f) for f in PHYSICS_FEATURES]
+    # ── Model A: trend extrapolation ────────────────────────────────────────
+    print("  Model A: per-device trend extrapolation …")
+    pred_a = predict_trend_extrapolation(profile, target_months)
 
-    all_preds = []
-    for m in trained["lgb"]:
-        all_preds.append(m.predict(X_pred))
-    for m in trained["lgb_log"]:
-        all_preds.append(np.expm1(np.maximum(m.predict(X_pred), 0)))
-    for scaler, ridge in trained["ridge"]:
-        X_ph = X_pred[:, phys_idx]
-        X_sc = scaler.transform(X_ph)
-        all_preds.append(np.maximum(ridge.predict(X_sc), 0))
+    # ── Model B: monthly LightGBM ────────────────────────────────────────────
+    print("  Model B: monthly LightGBM inference …")
+    pred_monthly = monthly.filter(pl.col("period").is_in(["validation", "test"]))
+    X_monthly = pred_monthly.select(MONTHLY_FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
 
-    ensemble_pred = np.median(np.stack(all_preds, axis=1), axis=1)
+    b_preds = []
+    for m in monthly_lgb_models:
+        b_preds.append(m.predict(X_monthly))
+    b_ensemble = np.median(np.stack(b_preds, axis=1), axis=1) if b_preds else np.zeros(len(X_monthly))
 
-    # Physics prediction for floor
-    physics_pred = physics_predict(pred_df, physics_params).to_numpy()
+    pred_b = pred_monthly.select(["deviceId", "year", "month"]).with_columns(
+        pl.Series("pred_monthly_lgb", np.maximum(b_ensemble, 0.0))
+    )
 
-    # DHW baseload floor: take maximum of ensemble and DHW_baseload (intercept)
-    dhw_floors = pred_df.join(physics_params, on="deviceId", how="left")["dhw_baseload"].to_numpy()
-    final_pred = np.maximum(ensemble_pred, dhw_floors * 0.5)  # floor at 50% of fitted DHW
+    # ── Model C: daily LightGBM aggregated to monthly ───────────────────────
+    print("  Model C: daily LightGBM → monthly …")
+    pred_daily_df = daily.filter(pl.col("period").is_in(["validation", "test"]))
+    X_daily = pred_daily_df.select(DAILY_FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
+    phys_idx = [DAILY_FEATURE_COLS.index(f) for f in DAILY_PHYSICS_FEATURES]
 
-    # Clip to non-negative
+    c_preds = []
+    for m in daily_models["lgb"]:
+        c_preds.append(m.predict(X_daily))
+    for m in daily_models["lgb_log"]:
+        c_preds.append(np.expm1(np.maximum(m.predict(X_daily), 0)))
+    for scaler, ridge in daily_models["ridge"]:
+        Xp = scaler.transform(X_daily[:, phys_idx])
+        c_preds.append(np.maximum(ridge.predict(Xp), 0))
+
+    c_daily_ensemble = np.median(np.stack(c_preds, axis=1), axis=1) if c_preds else np.zeros(len(X_daily))
+
+    pred_c_daily = pred_daily_df.select(["deviceId", "year", "month"]).with_columns(
+        pl.Series("pred_daily_val", np.maximum(c_daily_ensemble, 0.0))
+    )
+    pred_c = (
+        pred_c_daily.group_by(["deviceId", "year", "month"])
+        .agg(pl.col("pred_daily_val").mean().alias("pred_daily_lgb"))
+    )
+
+    # ── Combine all three models ─────────────────────────────────────────────
+    # Start from a complete (deviceId, year, month) grid
+    # Use pred_b as the base (has all devices × months from monthly df)
+    combined = pred_b.rename({"pred_monthly_lgb": "pred_b"})
+
+    # Join pred_a
+    combined = combined.join(
+        pred_a.rename({"pred_trend": "pred_a"}),
+        on=["deviceId", "month"],
+        how="left",
+    )
+
+    # Join pred_c
+    combined = combined.join(
+        pred_c.rename({"pred_daily_lgb": "pred_c"}),
+        on=["deviceId", "year", "month"],
+        how="left",
+    )
+
+    # Fill missing with pred_b (monthly LGB is most reliable fallback)
+    combined = combined.with_columns([
+        pl.col("pred_a").fill_null(pl.col("pred_b")),
+        pl.col("pred_c").fill_null(pl.col("pred_b")),
+    ])
+
+    # Compute median of three models
+    pA = combined["pred_a"].to_numpy()
+    pB = combined["pred_b"].to_numpy()
+    pC = combined["pred_c"].to_numpy()
+    final_pred = np.median(np.stack([pA, pB, pC], axis=1), axis=1)
     final_pred = np.maximum(final_pred, 0.0)
 
-    pred_df = pred_df.with_columns(pl.Series("pred_daily", final_pred))
+    combined = combined.with_columns(pl.Series("prediction", final_pred))
 
-    # Heating-only constraint: Jun-Aug ≤ Apr predictions per device
-    # Estimate April average from training data
+    # ── Post-processing guardrails ───────────────────────────────────────────
+    # 1. DHW floor: prediction >= 50% of per-device DHW baseload
+    combined = combined.join(physics_params.select(["deviceId", "dhw_baseload"]),
+                              on="deviceId", how="left")
+    combined = combined.with_columns(
+        pl.when(pl.col("dhw_baseload").is_not_null())
+        .then(pl.col("prediction").clip(lower_bound=pl.col("dhw_baseload") * 0.5))
+        .otherwise(pl.col("prediction"))
+        .alias("prediction")
+    ).drop("dhw_baseload")
+
+    # 2. Oct 2025 ≈ Oct 2024 anchor (blend 60/40)
+    oct24 = (
+        daily.filter((pl.col("period") == "train") & (pl.col("month") == 10))
+        .group_by("deviceId")
+        .agg(pl.col("x2_mean").mean().alias("oct24_mean"))
+    )
+    combined = combined.join(oct24, on="deviceId", how="left")
+    combined = combined.with_columns(
+        pl.when((pl.col("month") == 10) & pl.col("oct24_mean").is_not_null())
+        .then(pl.col("prediction") * 0.6 + pl.col("oct24_mean") * 0.4)
+        .otherwise(pl.col("prediction"))
+        .alias("prediction")
+    ).drop("oct24_mean")
+
+    # 3. Jun-Aug <= Apr for heating-only devices
     apr_avg = (
         daily.filter((pl.col("period") == "train") & (pl.col("month") == 4))
         .group_by("deviceId")
         .agg(pl.col("x2_mean").mean().alias("apr_mean"))
     )
-
-    # Aggregate daily → monthly
-    monthly = (
-        pred_df.group_by(["deviceId", "year", "month"])
-        .agg(pl.col("pred_daily").mean().alias("prediction"))
-        .sort(["deviceId", "year", "month"])
-    )
-
-    # Apply June-August heating cap for heating-only devices (those with small April load)
-    monthly = monthly.join(apr_avg, on="deviceId", how="left")
-    monthly = monthly.with_columns(
+    combined = combined.join(apr_avg, on="deviceId", how="left")
+    combined = combined.with_columns(
         pl.when(pl.col("month").is_in([6, 7, 8]) & pl.col("apr_mean").is_not_null())
         .then(pl.col("prediction").clip(upper_bound=pl.col("apr_mean")))
         .otherwise(pl.col("prediction"))
         .alias("prediction")
     ).drop("apr_mean")
 
-    # October 2025 sanity: compare with Oct 2024 actuals; cap upward outliers
-    oct24_avg = (
-        daily.filter((pl.col("period") == "train") & (pl.col("month") == 10))
-        .group_by("deviceId")
-        .agg(pl.col("x2_mean").mean().alias("oct24_mean"))
+    # 4. Final clip to [0, 1]
+    combined = combined.with_columns(
+        pl.col("prediction").clip(lower_bound=0.0, upper_bound=1.0)
     )
-    monthly = monthly.join(oct24_avg, on="deviceId", how="left")
-    monthly = monthly.with_columns(
-        pl.when((pl.col("month") == 10) & pl.col("oct24_mean").is_not_null())
-        .then(
-            # Blend prediction with Oct 2024 anchor (60/40)
-            pl.col("prediction") * 0.6 + pl.col("oct24_mean") * 0.4
-        )
-        .otherwise(pl.col("prediction"))
-        .alias("prediction")
-    ).drop("oct24_mean")
 
-    # Select final columns
-    result = monthly.select(["deviceId", "year", "month", "prediction"])
-    return result
+    return combined.select(["deviceId", "year", "month", "prediction"]).sort(
+        ["deviceId", "year", "month"]
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -717,35 +861,66 @@ def main():
     # 1. Load & clean
     df, devices = load_data()
 
-    # 2. Fetch weather & join
+    # 2. Fetch weather (optional)
     weather = fetch_weather(devices)
-    df = join_weather(df, devices, weather)
+    has_weather = weather is not None
+
+    if has_weather:
+        print("Joining weather data …")
+        df = join_weather(df, devices, weather)
+    else:
+        print("No weather data — using t1-based physics fallback")
+        # Add lat/lon from devices for day_length calculation
+        df = df.join(devices.select(["deviceId", "latitude", "longitude"]), on="deviceId", how="left")
 
     # 3. Feature engineering
     print("Computing physics features …")
-    df = add_physics_features(df)
+    df = add_physics_features(df, has_weather)
 
     print("Aggregating to daily …")
     daily = daily_aggregate(df, devices)
     print(f"Daily rows: {len(daily):,}")
 
-    # 4. Fit physics baseline
+    # 4. Build monthly features
+    print("Building monthly features …")
+    monthly = build_monthly_features(daily)
+    print(f"Monthly rows: {len(monthly):,}")
+
+    # 5. Compute per-device monthly profile (for trend extrapolation)
+    print("Computing device monthly profiles …")
+    profile = compute_device_monthly_profile(daily)
+
+    # 6. Fit physics baseline
     print("Fitting per-device physics baseline …")
-    physics_params = fit_physics_baseline(daily)
+    physics_params = fit_physics_baseline(monthly)
 
-    # 5. Train ML models
-    print("Training ML models …")
-    trained = train_models(daily)
+    # 7. Train models
+    print("Training monthly LightGBM …")
+    monthly_lgb_models = train_monthly_lgb(monthly)
 
-    # 6. Build submission
+    print("Training daily LightGBM + Ridge …")
+    daily_models = train_daily_models(daily)
+
+    # 8. Build submission
     print("Building submission …")
-    submission = build_submission(daily, trained, physics_params)
-    print(f"Submission rows: {len(submission):,} (expected 3600 = 600 × 6)")
+    submission = build_submission(
+        daily, monthly, daily_models, monthly_lgb_models, physics_params, profile
+    )
+    n = len(submission)
+    print(f"Submission rows: {n:,} (expected 3600 = 600 × 6)")
+    if n != 3600:
+        print(f"  WARNING: expected 3600 rows, got {n}")
 
     submission.write_csv(SUBMISSION_FILE)
     print(f"Saved → {SUBMISSION_FILE}")
 
-    # 7. Submit via API
+    # Print quick summary stats
+    pred_vals = submission["prediction"].to_numpy()
+    print(f"Prediction stats: mean={pred_vals.mean():.4f}, "
+          f"median={np.median(pred_vals):.4f}, "
+          f"min={pred_vals.min():.4f}, max={pred_vals.max():.4f}")
+
+    # 9. Submit via API
     api_token = os.getenv("TEAM_TOKEN")
     server_url = os.getenv("SERVER_URL")
     if api_token and server_url:
