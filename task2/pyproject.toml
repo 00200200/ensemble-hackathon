@@ -1,21 +1,35 @@
 [project]
 name = "task2"
 version = "0.1.0"
-description = "Add your description here"
+description = "Repository-level code completion pipeline"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
-    "lancedb>=0.29.2",
-    "nltk>=3.9.3",
-    "pandas>=3.0.1",
+    "networkx>=3.0",
+    "numpy>=1.24.0",
+    "faiss-cpu>=1.7.4",
+    "sentence-transformers>=2.2.0",
     "rank-bm25>=0.2.2",
-    "sentence-transformers>=5.3.0",
-    "tqdm>=4.67.3",
-    "tree-sitter>=0.25.2",
-    "tree-sitter-python>=0.25.0",
+    "requests>=2.28.0",
+    "python-dotenv>=1.0.0",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
-    "ruff>=0.15.6",
+    "pytest>=7.0",
+    "black>=23.0",
+    "mypy>=1.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true

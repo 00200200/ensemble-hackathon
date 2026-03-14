@@ -1,0 +1,101 @@
+# Winning strategies for FIM code completion context retrieval
+
+**The single most impactful insight for maximizing ChrF in the JetBrains Context Collection Competition is that symbol-aware retrieval at chunk granularity, ordered by ascending relevance to survive left-truncation, outperforms sophisticated embedding-based approaches.** The ASE 2025 competition proved that GPU-free keyword search with good query construction beats dense retrieval — the top team used Zoekt code search with Tree-sitter-extracted identifiers and no embeddings at all. Combining static analysis (import resolution, definition lookup) with lexical retrieval (BM25/Zoekt) and careful context assembly is the winning formula. This report synthesizes findings from 15+ papers, all competition solution papers, and practical implementation research.
+
+---
+
+## The competition: what the winning teams actually did
+
+The **Context Collection Competition** at ASE 2025, co-organized by JetBrains Research and Mistral AI, challenged participants to build a context collection pipeline that maximizes average ChrF across three models: **Mellum** (4B params, 8K context, SPM format), **Codestral** (Mistral, PSM format), and **Qwen2.5-Coder** (PSM format). Participants control only the context string — they cannot influence model inference. Context is trimmed from the left when it exceeds the model's window. The dataset derives from the Long Code Arena benchmark, with 247 Python repositories in the public phase.
+
+**NoMoreActimel (1st Python)** used Qwen2.5-Coder-1.5B-Instruct to generate reformulated queries from the prefix/suffix, then performed embedding-based retrieval with heuristic boosting (location in file, query length). They counted tokens using Mellum's actual tokenizer and indexed cross-repository/cross-revision data for broader search coverage.
+
+**SpareCodeComplete (1st Kotlin, 2nd Python, 0.725 ChrF)** proved that keyword search alone suffices. Their pipeline: build a Zoekt index from all available repository data → extract identifiers via Tree-sitter AST parsing → construct Zoekt queries from extracted symbols → apply **gradual query relaxation** (exact match first, then progressively fewer terms, regex, OR logic) → concatenate top results. No GPU, no embeddings. They published their approach as "SpareCodeSearch: Searching for Code Context When You Have No Spare GPU."
+
+**WSPR_NCSU (3rd)** used a hybrid BM25 + FAISS ensemble with **Reciprocal Rank Fusion** (BM25 weight 0.2, FAISS weight 0.8). Their key innovation was **relative positioning**: retrieving not just similar chunks but also the next and previous chunks adjacent to retrieved results, capturing surrounding context.
+
+**REALISE Lab** discovered that **chunk-level retrieval beats file-level by 6%**, and that **reversing BM25-ranked file order** (ascending relevance) yielded ~3% improvement because left-truncation preserves the most relevant content placed last, closest to the cursor. Local-scope trimming of prefix/suffix to the nearest enclosing block also helped consistently.
+
+Common traits across all winners: Tree-sitter parsing for symbol extraction, classical IR ranking (BM25 or Zoekt), chunk-level retrieval rather than whole files, and careful token counting with the target model's tokenizer.
+
+---
+
+## Academic approaches that matter most
+
+The research landscape for repository-level code completion has converged on a clear hierarchy of techniques. **STALL+** provides the definitive finding: combining retrieval-augmented generation with static analysis achieves the best accuracy on CrossCodeEval — **34.67 line EM for Python** versus a previous SOTA of 21.35. File-level dependency extraction in the prompting phase (parsing imports → retrieving class/function definitions from imported modules) is the single most effective static analysis integration, adding under 2 seconds of latency.
+
+**RepoCoder** (EMNLP 2023) established that iterative retrieval-generation improves results by 10%+. The model's own initial completion serves as a better retrieval query than the unfinished code alone. **AlignCoder** (2025) pushed this further: generating 4 candidate completions to construct an enhanced query, then using an RL-trained retriever, achieving **18.1% EM improvement** on CrossCodeEval — the strongest published result. **RLCoder** (ICSE 2025) introduced a stop signal mechanism where the retriever autonomously decides whether retrieval helps or hurts, yielding **12.2% EM improvement** while avoiding noisy context injection.
+
+Graph-based approaches capture structural information that flat retrieval misses. **RepoHyper** builds a Repo-level Semantic Graph with call graph, import, and class hierarchy edges, then uses a search-then-expand strategy with a GNN-based link predictor for reranking — **+49% retrieval accuracy** over similarity-only methods. **DraCo** (ACL 2024) uses dataflow-guided retrieval with type-sensitive dependency relations, retrieving definitions and type information rather than similar code. **GraphCoder** (ASE 2024) builds Code Context Graphs with control-flow, data-dependence, and control-dependence edges, applying decay-weighted scoring so context closer to the completion site receives higher weight.
+
+**CoCoMIC** introduced CCFinder, a static-analysis tool that builds a project context graph from imports, function calls, class hierarchies, and variable references, then retrieves neighbor entities. This achieves **33.94% relative EM improvement** over in-file-only completion. **R2C2-Coder** showed that combining abstract contexts (AST-extracted class/function signatures) with fine-grained snippet contexts provides complementary breadth and depth.
+
+A critical meta-finding: **Repoformer** (ICML 2024) demonstrated that only ~20% of retrievals actually improve completion quality. Selective retrieval — skipping context when the model already knows the answer — saves 70% latency without sacrificing accuracy. This means a winning pipeline should have a mechanism for deciding when external context adds value.
+
+---
+
+## FIM format, context ordering, and left-truncation strategy
+
+Understanding how FIM models consume context is essential for optimal context assembly. Mellum uses **SPM (Suffix-Prefix-Middle)** format: `<filename>context_files...<fim_suffix>suffix<fim_prefix>prefix<fim_middle>`. Codestral and Qwen2.5-Coder use **PSM (Prefix-Suffix-Middle)** format. In SPM, the prefix and middle form one contiguous sequence, enabling natural left-to-right generation flow from prefix into the completion.
+
+**Left-truncation fundamentally shapes strategy.** When context exceeds the model's window, the beginning of the prompt gets cut first. This creates a clear imperative: **place the most relevant context closest to the cursor** (at the end of the prefix, immediately before the FIM hole). The REALISE Lab competition paper confirmed this empirically — ascending relevance order (least relevant first, most relevant last) outperforms descending order by ~3%.
+
+The "lost in the middle" phenomenon (Liu et al., 2023) compounds this: LLMs exhibit a U-shaped attention curve, attending best to information at the beginning and end of context, with significant degradation for middle content. For FIM prompts, this means cross-file context placed far from both the start and the cursor position receives the least attention. The practical implication is a **sandwich strategy**: place moderately relevant context at the start (benefiting from primacy), less relevant context in the middle (where it matters least), and the most relevant context at the end (benefiting from both recency and left-truncation resilience).
+
+For context budget allocation across the three models, a practical split is approximately **40% current-file prefix, 30% cross-file context, 20% suffix, 10% buffer** for special tokens and separators. For Mellum's tight 8K window, aggressive pruning is essential — provide only function signatures from dependency files rather than full implementations. The **Hierarchical Context Pruning** paper (AAAI 2025) showed that pruning function implementations from dependency files while retaining signatures reduces input from 50K+ tokens to ~8K with improved accuracy.
+
+**AST-FIM** (2025) is a training-time technique where complete AST subtrees (blocks, expressions, functions) are masked instead of random character spans, improving benchmark performance by up to 5 points. While participants can't change model training, this insight suggests that completions at syntactic boundaries (function bodies, block statements) benefit most from structural context.
+
+---
+
+## The retrieval pipeline: what to retrieve and how
+
+The optimal retrieval pipeline combines multiple signals in a specific order. Here is the architecture that synthesizes findings from competition winners and top papers:
+
+**Step 1: Symbol extraction via Tree-sitter.** Parse the prefix and suffix with Tree-sitter (not Python's `ast` module, which fails on incomplete code). Extract all identifiers, function calls, class references, and import statements. Prioritize symbols by proximity to the cursor and frequency of occurrence in the diff. These symbols become the primary retrieval queries.
+
+**Step 2: Import resolution and definition retrieval.** Parse the current file's import statements. For each imported module/symbol, retrieve its definition from the repository. For classes, extract the signature, member variables, and method signatures (not full implementations). For functions, extract signature and docstring. This is the single highest-value context type — STALL+ showed file-level dependency extraction roughly doubles EM compared to similarity-only retrieval. Tools: `jedi.Script.goto()` for cross-file definition resolution, or custom Tree-sitter traversal of imported files. The `importlab` library can build dependency graphs efficiently.
+
+**Step 3: Hybrid retrieval for similar code.** Run BM25 and optionally dense embedding search in parallel over chunk-indexed repository files. Use the extracted identifiers (not raw prefix text) as queries. Fuse results via Reciprocal Rank Fusion. **Chunk granularity matters enormously**: function-level or logical-block-level chunks outperform file-level by 6%+. Use AST-aware chunking (the **cAST** method splits at syntactic boundaries using Tree-sitter, yielding +4.3 Recall@5 on RepoEval). A chunk size of 10–20 lines or one function/class method is the sweet spot.
+
+**Step 4: Gradual query relaxation.** Start with strict exact-match queries containing all extracted identifiers. If insufficient results, progressively relax: remove less common terms, switch to OR logic, use regex for partial matching. SpareCodeComplete's success proves this approach's effectiveness.
+
+**Step 5: Bidirectional retrieval with relative positioning.** Retrieve similar chunks for both the prefix and suffix. For prefix-matched chunks, also include the next adjacent chunk from the source file (what was written after similar code). For suffix-matched chunks, include the previous adjacent chunk. This captures surrounding context that often contains the pattern being completed.
+
+**Step 6: Reranking.** Score candidates by a weighted combination of: identifier overlap with prefix/suffix (strongest single signal per CrossCodeEval analysis), import relationship to current file, embedding similarity, file path proximity (same directory = boost), and recency (files in the same commit). **Top-5 chunks** is the empirically optimal number — more introduces noise with diminishing returns.
+
+**Step 7: Context assembly.** Order assembled context by ascending relevance. Place dependency definitions (import-resolved signatures) immediately before the current file prefix. Place retrieved similar chunks before the dependency definitions. Deduplicate overlapping fragments using structure-aware merging — when multiple queries hit adjacent regions in the same file, merge them to eliminate redundancy and restore logical flow. Count tokens using each target model's actual tokenizer to maximize window utilization.
+
+---
+
+## ChrF-specific optimizations and metric characteristics
+
+ChrF computes a character n-gram F-score with **β=2, weighting recall twice as heavily as precision**. This has direct implications for strategy. Missing characters in the completion hurts more than generating extra characters. The metric uses character n-grams of order 1–6 by default, making it sensitive to exact variable names, function names, and syntactic details while being more forgiving than exact match for partial correctness.
+
+To maximize ChrF specifically, the context must help models reproduce the exact character sequences in the ground truth. Providing **definitions of symbols that appear in the target completion** is the highest-leverage action — when the model sees the exact function signature, class name, or variable definition in context, it can reproduce those character sequences precisely. This is why static analysis outperforms pure similarity-based retrieval: it surfaces the exact definitions the completion needs.
+
+Since the evaluation averages ChrF across three models with different capabilities and context windows, the strategy must be **model-agnostic**. Optimizing for one model at the expense of others loses points. The safest approach: ensure the most critical context (symbol definitions, directly relevant chunks) fits within Mellum's 8K window, then fill additional space with supplementary context that benefits the 16K+ models. This way, all three models get the essential information.
+
+One competition-specific optimization: since recently changed files (proxy for IDE's recently opened files) are provided as input, always include these files as high-priority context. They represent the developer's active working set and frequently contain symbols and patterns relevant to the current completion.
+
+---
+
+## Tools, libraries, and implementation building blocks
+
+For AST parsing, **tree-sitter** with `py-tree-sitter` bindings is the clear choice — it handles broken/incomplete code (critical at cursor positions), supports incremental parsing, and covers 100+ languages. Use tree-sitter's S-expression pattern queries to extract specific node types (function definitions, class definitions, import statements) efficiently.
+
+For Python static analysis, **jedi** provides the richest API: `Script.goto()` for definition jumping, `Script.infer()` for type inference, `Script.get_references()` for cross-file reference finding, and `Script.get_names()` for all names in a file. It resolves imports across files including virtualenv packages and uses `parso` as its parser (which handles broken Python). **rope** offers complementary capabilities, particularly its Static Object Analysis for type inference and its SQLite-backed AutoImport cache.
+
+For code search indexing, **Zoekt** (used by Sourcegraph and the winning team) provides fast trigram-based code search with filename, substring, and boundary signals. For embedding-based retrieval, the current top models are **Voyage-Code-3** (API, 32K context, Matryoshka embeddings, +13.8% over OpenAI), **Qodo-Embed-1** (open, 7B or 1.5B variants), and **Jina Code V4**. Older models like UniXcoder and CodeBERT remain competitive baselines. For hybrid retrieval fusion, **LangChain's EnsembleRetriever** with Reciprocal Rank Fusion is a proven production-ready option.
+
+Key GitHub repositories with implementations include: **DraCo** (`nju-websoft/DraCo`) for dataflow-guided retrieval, **RepoHyper** (`FSoft-AI4Code/RepoHyper`) for graph-based search-expand-refine, **monitors4codegen** (`microsoft/monitors4codegen`) for the multilspy LSP client library, and the **ASE 2025 starter kit** (`JetBrains-Research/ase2025-starter-kit`) for the competition baseline.
+
+---
+
+## Conclusion: the non-obvious insights that differentiate winners
+
+The research converges on several counter-intuitive findings. **GPU-expensive embeddings are unnecessary** — SpareCodeComplete's keyword-only approach with Zoekt achieved top-2 results, proving that well-constructed symbolic queries outperform brute-force semantic similarity. **More context is not better** — there is an optimal amount (roughly top-5 chunks), and excess context actively degrades all three models. **Chunk retrieval dominates file retrieval** by a consistent 6% margin, because fine-grained relevant snippets pack more information per token than entire files diluted with irrelevant code.
+
+The deepest non-obvious insight is that **context ordering interacts with left-truncation to create a strong positional effect**. Placing context in ascending relevance order — counterintuitive from a "show the best first" perspective — ensures the most valuable snippets survive truncation and sit closest to the cursor where models attend most strongly. Combined with local-scope trimming (restricting prefix/suffix to the enclosing function/class rather than the full file), this ordering strategy alone yields ~3% improvement for essentially zero computational cost.
+
+For a competition-winning pipeline specifically, the highest-ROI approach is: Tree-sitter symbol extraction → import-resolved definition retrieval → BM25/Zoekt chunk search with gradual query relaxation → ascending-relevance ordering → per-model token budget management. Add iterative retrieval (generate a speculative completion, use it as a refined query) if latency permits. The combination of static analysis precision with lexical retrieval breadth, assembled into a carefully ordered and deduplicated context window, represents the current frontier of what's achievable without modifying the completion models themselves.     
