@@ -422,7 +422,7 @@ MONOTONE[FEATURE_COLS.index("HDD_15")] = 1  # more heating days → higher load
 MONOTONE[FEATURE_COLS.index("HDD_18")] = 1
 
 LGB_PARAMS = {
-    "objective": "huber",       # supports monotone_constraints; small delta ≈ L1/MAE
+    "objective": "huber",  # supports monotone_constraints; small delta ≈ L1/MAE
     "huber_delta": 1.0,
     "linear_tree": True,
     "monotone_constraints": MONOTONE,
