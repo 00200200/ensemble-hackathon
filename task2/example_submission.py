@@ -14,7 +14,7 @@ ENDPOINT = "task2"
 API_TOKEN = os.getenv("TEAM_TOKEN")
 SERVER_URL = os.getenv("SERVER_URL")
 # Change accordingly
-JSONL_FILE = "path/to/context_file.jsonl"
+JSONL_FILE = "submission_ensemble_final.jsonl"
 STAGE = "practice"
 
 def main():

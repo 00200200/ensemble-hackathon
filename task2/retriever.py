@@ -67,12 +67,18 @@ class Retriever:
         except Exception:
             pass
 
-        tokenized_corpus = []
-        texts_to_embed = []
+        tokenized_corpus: List[List[str]] = []
+        texts_to_embed: List[str] = []
 
         # Always prepare the corpus for BM25
         for c in chunks:
-            doc = f"File: {c.get('rel_filepath', 'unknown')}\n\n{c.get('text', '')}"
+            # Prefer embedding a compact abstract when available, falling back
+            # to raw code. Always include filepath for extra lexical signal.
+            abstract = c.get("abstract") or ""
+            base_text = abstract or c.get("text", "")
+            header = f"File: {c.get('rel_filepath', 'unknown')}"
+            doc = f"{header}\n\n{base_text}"
+
             tokenized_corpus.append(doc.lower().split())
             if not table_exists:
                 texts_to_embed.append(doc)

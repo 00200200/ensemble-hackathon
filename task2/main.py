@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from tqdm import tqdm
 
 from chunker import extract_repo, process_repository
+from abstraction import generate_abstract
 from retriever import Retriever
 
 try:
@@ -20,7 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
 FILE_SEP_TOKEN = "<|file_sep|>"
 
 # Conservative shared budget so that no model needs to further trim.
-DEFAULT_TOKEN_BUDGET = 8000
+DEFAULT_TOKEN_BUDGET = 6000
 
 # Prefer using the Qwen2.5-Coder tokenizer for budgeting, but allow overrides.
 DEFAULT_TOKENIZER_MODEL = os.getenv(
@@ -322,8 +323,8 @@ def run_pipeline(
     archives_root: Path,
     output_path: Path,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
-    top_k: int = 10,
-    alpha: float = 0.5,
+    top_k: int = 5,
+    alpha: float = 0.0,
 ) -> None:
     retriever = Retriever()
 
@@ -373,15 +374,24 @@ def run_pipeline(
                 cache_file = chunks_cache_dir / f"{archive_name}.jsonl"
                 if cache_file.exists():
                     # Load pre-chunked repository from cache.
-                    chunks: List[Dict[str, Any]] = []
+                    chunks = []
                     with cache_file.open("r", encoding="utf-8") as cf:
                         for line_c in cf:
                             chunks.append(json.loads(line_c))
+                    # Ensure abstracts exist (e.g. cache from before abstraction was added).
+                    for ch in chunks:
+                        if "abstract" not in ch or not ch.get("abstract"):
+                            ch["abstract"] = generate_abstract(ch)
                 else:
                     # First time seeing this repo: extract, chunk, and cache.
                     with tempfile.TemporaryDirectory() as tmpdir:
                         extract_repo(str(archive_path), tmpdir)
                         chunks = process_repository(tmpdir)
+                    # Attach lightweight functional abstracts for each chunk
+                    # so retrieval can operate in a more semantic space
+                    # without changing the JSONL I/O surface.
+                    for ch in chunks:
+                        ch["abstract"] = generate_abstract(ch)
                     with cache_file.open("w", encoding="utf-8") as cf:
                         for ch in chunks:
                             cf.write(json.dumps(ch) + "\n")
@@ -442,7 +452,7 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path("Dataset for Participants/python-public.jsonl"),
+        default=Path("Task 2 dataset EnsembleAI 2026/python-public.jsonl"),
         help="Path to input dataset JSONL.",
     )
     parser.add_argument(
@@ -460,19 +470,19 @@ def main() -> None:
     parser.add_argument(
         "--token-budget",
         type=int,
-        default=DEFAULT_TOKEN_BUDGET,
+        default=6000,
         help="Approximate shared token budget per example.",
     )
     parser.add_argument(
         "--top-k",
         type=int,
-        default=10,
+        default=6,
         help="Number of chunks to retrieve before token‑aware filtering.",
     )
     parser.add_argument(
         "--alpha",
         type=float,
-        default=0.5,
+        default=0.7,
         help="Hybrid retrieval weight between dense and sparse scores.",
     )
 
