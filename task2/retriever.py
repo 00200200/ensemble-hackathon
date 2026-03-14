@@ -53,57 +53,58 @@ class Retriever:
 
     def build_index(self, table_name: str, chunks: List[Dict[str, Any]]):
         """
-        Creates a new table and inserts embeddings for all text chunks.
-        Also builds a BM25 index in memory for the given table/repo.
+        Creates a new table and inserts embeddings OR loads existing table to save GPU/CPU time.
+        Always builds a BM25 index in memory for the given table/repo.
         """
         if not chunks:
             return
-            
-        # We drop the table if it already exists for a new repo
-        if table_name in self.db.table_names():
-            self.db.drop_table(table_name)
 
-        # -----------------------------
-        # 1. Prepare Data & dense index
-        # -----------------------------
-        texts_to_embed = []
+        # 1. Check if embeddings already exist on disk
+        table_exists = False
+        try:
+            self.db.open_table(table_name)
+            table_exists = True
+        except Exception:
+            pass
+
         tokenized_corpus = []
+        texts_to_embed = []
 
+        # Always prepare the corpus for BM25
         for c in chunks:
-            # Combine filepath and text for richer embedding context
             doc = f"File: {c.get('rel_filepath', 'unknown')}\n\n{c.get('text', '')}"
-            texts_to_embed.append(doc)
-            # Tokenize for BM25
             tokenized_corpus.append(doc.lower().split())
+            if not table_exists:
+                texts_to_embed.append(doc)
 
-        embeddings = self.embed(texts_to_embed)
+        if not table_exists:
+            # 2a. Expensive operation: Embed and create LanceDB table
+            embeddings = self.embed(texts_to_embed)
 
-        data = []
-        for i, chunk in enumerate(chunks):
-            data.append({
-                "id": str(i),
-                "filepath": chunk.get("rel_filepath", ""),
-                "chunk_type": chunk.get("type", "unknown"),
-                "name": chunk.get("name", ""),
-                "text": chunk.get("text", ""),
-                "vector": embeddings[i]
-            })
+            data = []
+            for i, chunk in enumerate(chunks):
+                data.append({
+                    "id": str(i),
+                    "filepath": chunk.get("rel_filepath", ""),
+                    "chunk_type": chunk.get("type", "unknown"),
+                    "name": chunk.get("name", ""),
+                    "text": chunk.get("text", ""),
+                    "vector": embeddings[i]
+                })
 
-        # Define schema explicitly to avoid PyArrow inference issues on empty fields
-        schema = pa.schema([
-            pa.field("id", pa.string()),
-            pa.field("filepath", pa.string()),
-            pa.field("chunk_type", pa.string()),
-            pa.field("name", pa.string()),
-            pa.field("text", pa.string()),
-            pa.field("vector", pa.list_(pa.float32(), self.model.get_sentence_embedding_dimension()))
-        ])
+            schema = pa.schema([
+                pa.field("id", pa.string()),
+                pa.field("filepath", pa.string()),
+                pa.field("chunk_type", pa.string()),
+                pa.field("name", pa.string()),
+                pa.field("text", pa.string()),
+                pa.field("vector", pa.list_(pa.float32(), self.model.get_sentence_embedding_dimension()))
+            ])
 
-        self.db.create_table(table_name, schema=schema, data=data)
+            # Force overwrite just in case there are residual broken files
+            self.db.create_table(table_name, schema=schema, data=data, mode="overwrite")
 
-        # -----------------------------
-        # 2. Build BM25 sparse index
-        # -----------------------------
+        # 2b. Build BM25 sparse index (Fast, in-memory)
         self.bm25_indices[table_name] = BM25Okapi(tokenized_corpus)
         self.repo_chunks[table_name] = chunks
         
