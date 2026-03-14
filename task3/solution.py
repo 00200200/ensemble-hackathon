@@ -399,112 +399,206 @@ def build_monthly_features(daily: pl.DataFrame) -> pl.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. MODEL A — PER-DEVICE PHYSICS LINEAR REGRESSION (PRIMARY)
+# 5. MODEL A — PER-DEVICE APRIL-ANCHORED PHYSICS MODEL (PRIMARY)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Month-specific decay relative to April.
+# April is the warmest training month (mean ~0.077) and best proxy for summer.
+# Jun-Aug: DHW-only mode (~50% of April); Oct: direct anchor from Oct 2024.
+SUMMER_DECAY = {5: 0.80, 6: 0.52, 7: 0.45, 8: 0.48, 9: 0.65, 10: None}
 
-def fit_physics_model(monthly: pl.DataFrame) -> pl.DataFrame:
+
+def fit_physics_model(monthly: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
     """
-    Per-device OLS: x2_monthly = HTC * HDD_15_monthly + DHW_baseload
-    Returns deviceId, htc, dhw_baseload, x2_train_mean, apr_mean, oct24_mean.
-    Uses monthly data so we have 7 clean training points per device.
+    Per-device anchor model using April as the summer baseline.
+    - apr_mean: device's April 2025 monthly mean x2 (best summer proxy)
+    - oct24_mean: device's October 2024 monthly mean x2 (anchor for Oct 2025)
+    - dhw_baseload: minimum expected x2 = 50% of April (pump never fully off)
+    - group_apr: fallback median for (deviceType, x3) group when device lacks April data
+    Also stores x3 and deviceType for LightGBM features.
     """
     train = monthly.filter(pl.col("period") == "train")
 
-    # Global fallback values
-    global_dhw = float(train.select(pl.col("x2_monthly").quantile(0.10)).item() or 0.02)
-    global_mean = float(train.select(pl.col("x2_monthly").mean()).item() or 0.10)
+    # Global fallback
+    all_x2 = train["x2_monthly"].drop_nulls().to_numpy()
+    global_mean = float(np.median(all_x2)) if len(all_x2) > 0 else 0.10
+
+    # April device-group medians: group by (deviceType, x3)
+    apr_train = train.filter(pl.col("month") == 4)
+    group_apr_df = (
+        apr_train
+        .group_by(["deviceType", "x3"])
+        .agg(pl.col("x2_monthly").median().alias("group_apr_median"))
+    )
 
     results = []
     for device_grp in train.partition_by("deviceId"):
         device_id = device_grp["deviceId"][0]
-        hdd = device_grp["HDD_15_monthly"].to_numpy()
         x2 = device_grp["x2_monthly"].to_numpy()
         months = device_grp["month"].to_numpy()
+        dt = int(device_grp["deviceType"][0]) if "deviceType" in device_grp.columns else -1
+        x3 = int(device_grp["x3"][0]) if "x3" in device_grp.columns else -1
 
-        mask = np.isfinite(x2) & np.isfinite(hdd)
-        x2_train_mean = float(np.nanmean(x2)) if mask.any() else global_mean
+        mask = np.isfinite(x2)
+        x2_train_mean = float(np.mean(x2[mask])) if mask.any() else global_mean
 
-        # April mean (best proxy for early summer)
-        apr_mask = months == 4
-        apr_mean = (
-            float(np.mean(x2[apr_mask & mask])) if (apr_mask & mask).any() else x2_train_mean * 0.4
-        )
-
-        # October 2024 mean (anchor for October 2025)
-        oct_mask = months == 10
-        oct24_mean = float(np.mean(x2[oct_mask & mask])) if (oct_mask & mask).any() else apr_mean
-
-        if mask.sum() >= 3:
-            A = np.column_stack([hdd[mask], np.ones(mask.sum())])
-            coef, _, _, _ = np.linalg.lstsq(A, x2[mask], rcond=None)
-            htc = max(float(coef[0]), 0.0)
-            dhw_baseload = max(float(coef[1]), 0.0)
-            # Sanity: cap DHW at April mean (physics: summer can't exceed spring)
-            dhw_baseload = min(dhw_baseload, apr_mean)
-            # Floor: DHW must be at least 1% of normalized x2
-            dhw_baseload = max(dhw_baseload, 0.005)
+        # April anchor
+        apr_mask = (months == 4) & mask
+        if apr_mask.any():
+            apr_mean = float(np.mean(x2[apr_mask]))
         else:
-            htc = 0.0
-            dhw_baseload = max(x2_train_mean * 0.3, global_dhw)
+            # Use group median from (deviceType, x3)
+            grp_row = group_apr_df.filter(
+                (pl.col("deviceType") == dt) & (pl.col("x3") == x3)
+            )
+            if len(grp_row) > 0:
+                apr_mean = float(grp_row["group_apr_median"][0])
+            else:
+                apr_mean = x2_train_mean * 0.40  # rough April fraction
 
-        results.append(
-            {
-                "deviceId": device_id,
-                "htc": htc,
-                "dhw_baseload": dhw_baseload,
-                "x2_train_mean": x2_train_mean,
-                "apr_mean": apr_mean,
-                "oct24_mean": oct24_mean,
-            }
-        )
+        # October 2024 anchor
+        oct_mask = (months == 10) & mask
+        oct24_mean = float(np.mean(x2[oct_mask])) if oct_mask.any() else apr_mean
+
+        # DHW baseload = 50% of April (conservative floor for Jun-Aug)
+        dhw_baseload = max(apr_mean * 0.50, 0.005)
+
+        results.append({
+            "deviceId": device_id,
+            "apr_mean": apr_mean,
+            "oct24_mean": oct24_mean,
+            "dhw_baseload": dhw_baseload,
+            "x2_train_mean": x2_train_mean,
+        })
 
     return pl.DataFrame(results)
 
 
-def predict_physics(monthly_pred: pl.DataFrame, physics_params: pl.DataFrame) -> pl.DataFrame:
-    """
-    Apply per-device physics model to prediction months.
-    Uses actual HDD_15_monthly from validation/test period (computed from t1).
-    prediction = clip(HTC * HDD_actual + DHW_baseload, DHW_baseload * 0.8, apr_mean * 1.05)
-    """
-    pred = monthly_pred.join(physics_params, on="deviceId", how="left")
+def build_full_grid(devices: pl.DataFrame) -> pl.DataFrame:
+    """Build a complete 600 devices × 6 months = 3600-row prediction grid."""
+    device_ids = devices["deviceId"].to_list()
+    rows = [
+        {"deviceId": did, "year": 2025, "month": m}
+        for did in device_ids
+        for m in [5, 6, 7, 8, 9, 10]
+    ]
+    return pl.DataFrame(rows)
 
+
+def predict_physics(
+    full_grid: pl.DataFrame,
+    monthly: pl.DataFrame,
+    physics_params: pl.DataFrame,
+) -> pl.DataFrame:
+    """
+    Per-device physics prediction for all 3600 (device, month) pairs.
+
+    Strategy:
+      - May: apr * 0.80  (some residual heating demand)
+      - Jun: apr * 0.52
+      - Jul: apr * 0.45  (peak summer, DHW only)
+      - Aug: apr * 0.48
+      - Sep: apr * 0.65  (transition back toward heating)
+      - Oct: 0.5 * oct24 + 0.5 * (apr * 0.90)  (anchor to last year + physics)
+
+    If actual HDD_15_monthly is available from validation/test t1 data and is
+    above zero, we add a small HDD-proportional correction on top of the base.
+    """
+    # Join physics params onto the full grid
+    pred = full_grid.join(physics_params, on="deviceId", how="left")
+
+    # Join actual monthly features from validation/test (for HDD correction)
+    monthly_pred = monthly.filter(pl.col("period").is_in(["validation", "test"])).select([
+        "deviceId", "year", "month",
+        "HDD_15_monthly", "t1_mean_monthly", "day_length_monthly",
+    ])
+    pred = pred.join(monthly_pred, on=["deviceId", "year", "month"], how="left")
+
+    # Fill missing physics params with global fallback
+    global_apr = float(physics_params["apr_mean"].median())
+    global_oct = float(physics_params["oct24_mean"].median())
+    pred = pred.with_columns([
+        pl.col("apr_mean").fill_null(global_apr),
+        pl.col("oct24_mean").fill_null(global_oct),
+        pl.col("dhw_baseload").fill_null(global_apr * 0.50),
+        pl.col("HDD_15_monthly").fill_null(0.0),
+    ])
+
+    # Base prediction from decay table
+    # Build per-row using when/then chains
     pred = pred.with_columns(
-        [
-            (
-                pl.col("htc").fill_null(0.0) * pl.col("HDD_15_monthly").fill_null(0.0)
-                + pl.col("dhw_baseload").fill_null(0.02)
-            ).alias("phys_raw"),
-        ]
+        pl.when(pl.col("month") == 5).then(pl.col("apr_mean") * 0.80)
+        .when(pl.col("month") == 6).then(pl.col("apr_mean") * 0.52)
+        .when(pl.col("month") == 7).then(pl.col("apr_mean") * 0.45)
+        .when(pl.col("month") == 8).then(pl.col("apr_mean") * 0.48)
+        .when(pl.col("month") == 9).then(pl.col("apr_mean") * 0.65)
+        .when(pl.col("month") == 10).then(
+            pl.col("oct24_mean") * 0.6 + pl.col("apr_mean") * 0.90 * 0.4
+        )
+        .otherwise(pl.col("apr_mean"))
+        .alias("phys_base")
     )
 
-    # Oct 2025 anchor: blend 50/50 with Oct 2024 actual
+    # Small HDD correction: +0.0003 per degree-day above 5 dd (some warmth may remain)
     pred = pred.with_columns(
-        pl.when(pl.col("month") == 10)
-        .then(pl.col("phys_raw") * 0.5 + pl.col("oct24_mean").fill_null(pl.col("phys_raw")) * 0.5)
-        .otherwise(pl.col("phys_raw"))
-        .alias("phys_pred")
+        (pl.col("phys_base")
+         + (pl.col("HDD_15_monthly") - 5.0).clip(lower_bound=0.0) * 0.0003
+        ).alias("phys_pred")
     )
 
-    # Floor: at least 80% of DHW baseload (pump never goes fully off)
+    # Floor: DHW baseload
     pred = pred.with_columns(
         pl.col("phys_pred")
-        .clip(lower_bound=pl.col("dhw_baseload").fill_null(0.005) * 0.8)
+        .clip(lower_bound=pl.col("dhw_baseload"))
         .alias("phys_pred")
     )
 
-    # Summer cap: Jun-Aug must be <= April level (no heating, DHW only)
+    # Cap at device's October 2024 level (summer can't exceed autumn)
     pred = pred.with_columns(
-        pl.when(pl.col("month").is_in([6, 7, 8]))
-        .then(
-            pl.col("phys_pred").clip(upper_bound=pl.col("apr_mean").fill_null(pl.col("phys_pred")))
-        )
-        .otherwise(pl.col("phys_pred"))
+        pl.col("phys_pred")
+        .clip(upper_bound=pl.col("oct24_mean"))
         .alias("phys_pred")
     )
 
     return pred.select(["deviceId", "year", "month", "phys_pred"])
+
+
+def validate_physics_on_train(monthly: pl.DataFrame, physics_params: pl.DataFrame) -> None:
+    """Self-check: compute physics MAE on training months by simulating predictions."""
+    train = monthly.filter(pl.col("period") == "train")
+
+    # Map training months to decay factors (relative to April of same device)
+    # For Oct-Mar, we compare against actuals
+    TRAIN_DECAY = {10: None, 11: 2.2, 12: 2.8, 1: 2.8, 2: 3.0, 3: 1.8, 4: 1.0}
+
+    errors = []
+    for device_grp in train.partition_by("deviceId"):
+        device_id = device_grp["deviceId"][0]
+        row = physics_params.filter(pl.col("deviceId") == device_id)
+        if len(row) == 0:
+            continue
+        apr = float(row["apr_mean"][0])
+        oct24 = float(row["oct24_mean"][0])
+
+        months_arr = device_grp["month"].to_numpy()
+        x2_arr = device_grp["x2_monthly"].to_numpy()
+        mask = np.isfinite(x2_arr)
+
+        for i, (m, x2_actual) in enumerate(zip(months_arr, x2_arr)):
+            if not np.isfinite(x2_actual):
+                continue
+            if m == 10:
+                pred = oct24
+            elif m in TRAIN_DECAY:
+                factor = TRAIN_DECAY[m]
+                pred = apr * factor if factor is not None else apr
+            else:
+                continue
+            errors.append(abs(x2_actual - pred))
+
+    if errors:
+        mae = np.mean(errors)
+        print(f"  Physics self-check MAE on train months: {mae:.4f}  (n={len(errors)})")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -607,40 +701,46 @@ def train_monthly_lgb(monthly: pl.DataFrame) -> list[lgb.Booster]:
 
 
 def build_submission(
+    full_grid: pl.DataFrame,
     monthly: pl.DataFrame,
     monthly_lgb_models: list[lgb.Booster],
     physics_params: pl.DataFrame,
 ) -> pl.DataFrame:
     """
+    Starts from the complete 3600-row grid (600 devices × 6 months).
     Weighted ensemble: 0.7 * physics + 0.3 * monthly_lgb.
-    Physics model uses actual HDD from validation/test periods (t1-derived).
+    Missing LGB rows fall back to physics prediction.
     """
+    # ── Model A: per-device physics prediction (all 3600 rows) ──────────────
+    print("  Model A: per-device physics prediction …")
+    pred_a_df = predict_physics(full_grid, monthly, physics_params)
+
+    # ── Model B: monthly LightGBM (only rows that exist in monthly data) ────
+    print("  Model B: monthly LightGBM inference …")
     pred_monthly = monthly.filter(pl.col("period").is_in(["validation", "test"]))
 
-    # ── Model A: per-device physics prediction ──────────────────────────────
-    print("  Model A: per-device physics prediction …")
-    pred_a_df = predict_physics(pred_monthly, physics_params)
-
-    # ── Model B: monthly LightGBM ────────────────────────────────────────────
-    print("  Model B: monthly LightGBM inference …")
-    X_pred = pred_monthly.select(MONTHLY_FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
-
-    if monthly_lgb_models:
+    if monthly_lgb_models and len(pred_monthly) > 0:
+        X_pred = pred_monthly.select(MONTHLY_FEATURE_COLS).fill_null(0).to_numpy().astype(np.float32)
         lgb_preds = np.stack([m.predict(X_pred) for m in monthly_lgb_models], axis=1)
         lgb_ensemble = np.median(lgb_preds, axis=1)
+        pred_b_df = pred_monthly.select(["deviceId", "year", "month"]).with_columns(
+            pl.Series("lgb_pred", np.maximum(lgb_ensemble, 0.0))
+        )
     else:
-        lgb_ensemble = np.zeros(len(X_pred))
+        pred_b_df = pred_a_df.select(["deviceId", "year", "month"]).with_columns(
+            pl.col("phys_pred").alias("lgb_pred")
+        )
+        # Will be unused since we fall back to physics below
 
-    pred_b_df = pred_monthly.select(["deviceId", "year", "month"]).with_columns(
-        pl.Series("lgb_pred", np.maximum(lgb_ensemble, 0.0))
+    # ── Combine on the full grid ─────────────────────────────────────────────
+    combined = pred_a_df.join(pred_b_df, on=["deviceId", "year", "month"], how="left")
+    # Missing LGB rows (devices not in monthly due to data gaps) → use physics
+    combined = combined.with_columns(
+        pl.col("lgb_pred").fill_null(pl.col("phys_pred"))
     )
 
-    # ── Combine: 70% physics + 30% LGB ──────────────────────────────────────
-    combined = pred_a_df.join(pred_b_df, on=["deviceId", "year", "month"], how="left")
     combined = combined.with_columns(
-        (pl.col("phys_pred") * 0.7 + pl.col("lgb_pred").fill_null(pl.col("phys_pred")) * 0.3).alias(
-            "prediction"
-        )
+        (pl.col("phys_pred") * 0.7 + pl.col("lgb_pred") * 0.3).alias("prediction")
     )
 
     # ── Final clip to [0, 1] ─────────────────────────────────────────────────
@@ -691,18 +791,23 @@ def main():
 
     # 5. Fit per-device physics model
     print("Fitting per-device physics model …")
-    physics_params = fit_physics_model(monthly)
+    physics_params = fit_physics_model(monthly, devices)
     print(f"  Devices fitted: {len(physics_params)}")
-    dhw_vals = physics_params["dhw_baseload"].to_numpy()
-    print(f"  DHW baseload: mean={dhw_vals.mean():.4f}, median={np.median(dhw_vals):.4f}")
+    apr_vals = physics_params["apr_mean"].to_numpy()
+    print(f"  April anchor: mean={apr_vals.mean():.4f}, median={np.median(apr_vals):.4f}")
+
+    # Self-validation: check physics predictions against training actuals
+    print("  Self-check on training months …")
+    validate_physics_on_train(monthly, physics_params)
 
     # 6. Train monthly LightGBM
     print("Training monthly LightGBM …")
     monthly_lgb_models = train_monthly_lgb(monthly)
 
-    # 7. Build submission
+    # 7. Build submission (starts from full 3600-row grid)
     print("Building submission …")
-    submission = build_submission(monthly, monthly_lgb_models, physics_params)
+    full_grid = build_full_grid(devices)
+    submission = build_submission(full_grid, monthly, monthly_lgb_models, physics_params)
     n = len(submission)
     print(f"Submission rows: {n:,} (expected 3600 = 600 × 6)")
     if n != 3600:
