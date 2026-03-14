@@ -1,0 +1,3131 @@
+format-version: 1.4
+
+[Term]
+id: class_0
+name: chemical entity
+def: "A chemical entity is a physical entity of interest in chemistry including molecular entities, parts thereof, and chemical substances." []
+
+[Term]
+id: class_1
+name: molecular entity
+def: "Any constitutionally or isotopically distinct atom, molecule, ion, ion pair, radical, radical ion, complex, conformer etc., identifiable as a separately distinguishable entity." []
+is_a: class_0
+
+[Term]
+id: class_10
+name: heteroatomic molecular entity
+def: "A molecular entity consisting of two or more chemical elements." []
+is_a: class_6
+
+[Term]
+id: class_100
+name: oligosaccharide derivative
+def: "A carbohydrate derivative that is formally obtained from an oligosaccharide." []
+is_a: class_43
+is_a: class_85
+
+[Term]
+id: class_101
+name: glycoside
+def: "A glycosyl compound resulting from the attachment of a glycosyl group to a non-acyl group RO‒, RS‒, RSe‒, etc. The bond between the glycosyl group and the non-acyl group is called a glycosidic bond. By extension, the terms <em>N</em>-glycosides and <em>C</em>-glycosides are used as class names for glycosylamines and for compounds having a glycosyl group attached to a hydrocarbyl group respectively. These terms are misnomers and should not be used. The preferred terms are glycosylamines and <em>C</em>-glycosyl compounds, respectively." []
+is_a: class_91
+
+[Term]
+id: class_102
+name: aromatic ether
+def: "Any ether in which the oxygen is attached to at least one aryl substituent." []
+is_a: class_28
+is_a: class_70
+
+[Term]
+id: class_103
+name: nucleobase-containing molecular entity
+def: "Any compound that has a nucleobase as a part." []
+is_a: class_18
+is_a: class_62
+
+[Term]
+id: class_104
+name: organochlorine compound
+def: "An organochlorine compound is a compound containing at least one carbon-chlorine bond." []
+is_a: class_88
+is_a: class_93
+
+[Term]
+id: class_105
+name: organic cation
+def: "Any organic ion with a net positive charge." []
+is_a: class_34
+is_a: class_97
+
+[Term]
+id: class_106
+name: salt
+def: "A salt is an assembly of cations and anions." []
+is_a: class_10
+
+[Term]
+id: class_107
+name: organic tricyclic compound
+is_a: class_78
+
+[Term]
+id: class_108
+name: amino oligosaccharide
+is_a: class_100
+
+[Term]
+id: class_109
+name: monosaccharide derivative
+def: "A carbohydrate derivative that is formally obtained from a monosaccharide." []
+is_a: class_43
+
+[Term]
+id: class_11
+name: organochalcogen compound
+def: "An organochalcogen compound is a compound containing at least one carbon-chalcogen bond." []
+is_a: class_7
+is_a: class_9
+
+[Term]
+id: class_110
+name: peptide
+def: "Amide derived from two or more amino carboxylic acid molecules (the same or different) by formation of a covalent bond from the carbonyl carbon of one to the nitrogen atom of another with formal loss of water. The term is usually applied to structures formed from α-amino acids, but it includes those derived from any amino carboxylic acid. X = OH, OR, NH2, NHR, etc." []
+is_a: class_53
+is_a: class_55
+
+[Term]
+id: class_111
+name: steroid
+def: "Any of naturally occurring compounds and synthetic analogues, based on the cyclopenta[<em>a</em>]phenanthrene carbon skeleton, partially or completely hydrogenated; there are usually methyl groups at C-10 and C-13, and often an alkyl group at C-17. By extension, one or more bond scissions, ring expansions and/or ring contractions of the skeleton may have occurred. Natural steroids are derived biogenetically from squalene which is a triterpene." []
+is_a: class_29
+is_a: class_78
+
+[Term]
+id: class_112
+name: amino-acid derivative
+def: "Any derivative of an amino acid resulting from reaction at an amino group, carboxy group, side-chain functional group, or from the replacement of any hydrogen by a heteroatom. The definition normally excludes peptides containing amino acid residues." []
+is_a: class_20
+
+[Term]
+id: class_113
+name: hydrides
+def: "Hydrides are chemical compounds of hydrogen with other chemical elements." []
+is_a: class_10
+is_a: class_21
+
+[Term]
+id: class_114
+name: polyatomic cation
+def: "A cation consisting of more than one atom." []
+is_a: class_54
+is_a: class_97
+
+[Term]
+id: class_115
+name: carbohydrate
+def: "Any member of the class of organooxygen compounds that is a polyhydroxy-aldehyde or -ketone or a lactol resulting from their intramolecular condensation (monosaccharides); substances derived from these by reduction of the carbonyl group (alditols), by oxidation of one or more hydroxy groups to afford the corresponding aldehydes, ketones, or carboxylic acids, or by replacement of one or more hydroxy group(s) by a hydrogen atom; and polymeric products arising by intermolecular acetal formation between two or more such molecules (disaccharides, polysaccharides and oligosaccharides). Carbohydrates contain only carbon, hydrogen and oxygen atoms; prior to any oxidation or reduction, most have the empirical formula C<small><sub><em>m</em></sub></small>(H<small><sub>2</sub></small>O)<small><sub><em>n</em></sub></small>. Compounds obtained from carbohydrates by substitution, etc., are known as carbohydrate derivatives and may contain other elements. Cyclitols are generally not regarded as carbohydrates." []
+is_a: class_35
+
+[Term]
+id: class_116
+name: nucleoside phosphate
+def: "A nucleobase-containing molecular entity that is a nucleoside in which one or more of the sugar hydroxy groups has been converted into a mono- or poly-phosphate. The term includes both nucleotides and non-nucleotide nucleoside phosphates." []
+is_a: class_103
+is_a: class_74
+is_a: class_76
+
+[Term]
+id: class_117
+name: secondary carboxamide
+def: "A carboxamide resulting from the formal condensation of a carboxylic acid with a primary amine; formula RC(=O)NHR<small><sup>1</small></sup>." []
+is_a: class_53
+
+[Term]
+id: class_118
+name: lactone
+def: "Any cyclic carboxylic ester containing a 1-oxacycloalkan-2-one structure, or an analogue having unsaturation or heteroatoms replacing one or more carbon atoms of the ring." []
+is_a: class_33
+is_a: class_56
+is_a: class_57
+
+[Term]
+id: class_119
+name: dipolar compound
+def: "An  organic molecule that is electrically neutral carrying a positive and a negative charge in one of its major canonical descriptions. In most dipolar compounds the charges are delocalized; however the term is also applied to species where this is not the case." []
+is_a: class_14
+
+[Term]
+id: class_12
+name: organooxygen compound
+def: "An organochalcogen compound containing at least one carbon-oxygen bond." []
+is_a: class_11
+is_a: class_8
+
+[Term]
+id: class_120
+name: ammonium ion derivative
+def: "A derivative of ammonium, NH<small><sub>4</sub></small><small><sup>+</small></sup>, in which one (or more) of the hydrogens bonded to the nitrogen have been replaced with univalent organyl groups. The substituting carbon of the organyl group must not itself be directly attached to a heteroatom (thereby excluding protonated amides, hemiaminals, etc)." []
+is_a: class_114
+is_a: class_18
+
+[Term]
+id: class_121
+name: organic salt
+is_a: class_106
+
+[Term]
+id: class_122
+name: zwitterion
+def: "A neutral compound having formal unit electrical charges of opposite sign on non-adjacent atoms. Sometimes referred to as inner salts, dipolar ions (a misnomer)." []
+is_a: class_119
+
+[Term]
+id: class_123
+name: fatty acid
+def: "Any aliphatic monocarboxylic acid derived from or contained in esterified form in an animal or vegetable fat, oil or wax. Natural fatty acids commonly have a chain of 4 to 28 carbons (usually unbranched and even-numbered), which may be saturated or unsaturated. By extension, the term is sometimes used to embrace all acyclic aliphatic carboxylic acids." []
+is_a: class_29
+is_a: class_79
+
+[Term]
+id: class_124
+name: phospholipid
+def: "A lipid containing phosphoric acid as a mono- or di-ester. The term encompasses phosphatidic acids and phosphoglycerides." []
+is_a: class_29
+is_a: class_74
+is_a: class_76
+
+[Term]
+id: class_125
+name: homopolycyclic compound
+is_a: class_30
+is_a: class_58
+
+[Term]
+id: class_126
+name: flavonoids
+def: "Any organic molecular entity whose stucture is based on derivatives of a phenyl-substituted 1-phenylpropane possessing a C<small><sub>15</sub></small> or C<small><sub>16</sub></small> skeleton, or such a structure which is condensed with a C<small><sub>6</sub></small>-C<small><sub>3</sub></small> lignan precursors. The term is a 'superclass' comprising all members of the classes of flavonoid, isoflavonoid, neoflavonoid, chalcones, dihydrochalcones, aurones, pterocarpan, coumestans, rotenoid, flavonolignan, homoflavonoid and flavonoid oligomers. Originally restricted to natural products, the term is also applied to synthetic compounds related to them." []
+is_a: class_5
+is_a: class_8
+
+[Term]
+id: class_127
+name: carbopolycyclic compound
+def: "A polyclic compound in which all of the ring members are carbon atoms." []
+is_a: class_125
+is_a: class_59
+
+[Term]
+id: class_128
+name: imidazopyrimidine
+is_a: class_36
+is_a: class_62
+is_a: class_82
+
+[Term]
+id: class_129
+name: purines
+def: "A class of imidazopyrimidines that consists of purine and its substituted derivatives." []
+is_a: class_128
+
+[Term]
+id: class_13
+name: molecule
+def: "Any polyatomic entity that is an electrically neutral entity consisting of more than one atom." []
+is_a: class_6
+
+[Term]
+id: class_130
+name: organic fundamental parent
+def: "An organic fundamental parent is a structure used as a basis for substitutive names in organic nomenclature, containing, in addition to one or more hydrogen atoms, a single atom of an element, a number of atoms (alike or different) linked together to form an unbranched chain, a monocyclic or polycyclic ring system, or a ring assembly or ring/chain system." []
+is_a: class_131
+is_a: class_5
+
+[Term]
+id: class_131
+name: organic hydride
+is_a: class_113
+
+[Term]
+id: class_132
+name: polyol
+def: "A compound that contains two or more hydroxy groups." []
+is_a: class_31
+
+[Term]
+id: class_133
+name: sulfur oxoacid derivative
+is_a: class_37
+is_a: class_60
+
+[Term]
+id: class_134
+name: glycerolipid
+def: "Any member of the group of lipids containing a common glycerol backbone to which at least one fatty acid-derived group is attached." []
+is_a: class_29
+
+[Term]
+id: class_135
+name: fluorine molecular entity
+is_a: class_71
+
+[Term]
+id: class_136
+name: monocyclic heteroarene
+is_a: class_62
+
+[Term]
+id: class_137
+name: heterotricyclic compound
+is_a: class_40
+
+[Term]
+id: class_138
+name: organic heterotricyclic compound
+def: "An organic tricyclic compound in which at least one of the rings of the tricyclic skeleton contains one or more heteroatoms." []
+is_a: class_107
+is_a: class_137
+is_a: class_39
+
+[Term]
+id: class_139
+name: hydroxy carboxylic acid
+def: "Any carboxylic acid with at least one hydroxy group." []
+is_a: class_31
+is_a: class_51
+
+[Term]
+id: class_14
+name: organic molecule
+def: "Any molecule that consists of at least one carbon atom as part of the electrically neutral entity." []
+is_a: class_13
+is_a: class_5
+
+[Term]
+id: class_140
+name: azole
+def: "Any monocyclic heteroarene consisting of a five-membered ring containing nitrogen. Azoles can also contain one or more other non-carbon atoms, such as nitrogen, sulfur or oxygen." []
+is_a: class_136
+is_a: class_36
+
+[Term]
+id: class_141
+name: organofluorine compound
+def: "An organofluorine compound is a compound containing at least one carbon-fluorine bond." []
+is_a: class_135
+is_a: class_88
+
+[Term]
+id: class_142
+name: amino acid
+def: "A carboxylic acid containing one or more amino groups." []
+is_a: class_51
+is_a: class_55
+
+[Term]
+id: class_143
+name: phenylpropanoid
+def: "Any organic aromatic compound with a structure based on a phenylpropane skeleton. The class includes naturally occurring phenylpropanoid esters, flavonoids, anthocyanins, coumarins and many small phenolic molecules as well as their semi-synthetic and synthetic analogues. Phenylpropanoids are also precursors of lignin." []
+is_a: class_28
+
+[Term]
+id: class_144
+name: nucleotide derivative
+def: "A nucleoside phosphate that is derived from a nucleotide." []
+is_a: class_116
+
+[Term]
+id: class_145
+name: oligopeptide
+def: "A peptide containing a relatively small number of amino acids." []
+is_a: class_110
+
+[Term]
+id: class_146
+name: tertiary amino compound
+def: "A compound formally derived from ammonia by replacing three hydrogen atoms by organyl groups." []
+is_a: class_55
+
+[Term]
+id: class_147
+name: alkaloid
+def: "Any of the naturally occurring, basic nitrogen compounds (mostly heterocyclic) occurring mostly in the plant kingdom, but also found in bacteria, fungi, and animals. By extension, certain neutral compounds biogenetically related to basic alkaloids are also classed as alkaloids. Amino acids, peptides, proteins, nucleotides, nucleic acids, amino sugars and antibiotics are not normally regarded as alkaloids. Compounds in which the nitrogen is  exocyclic (dopamine, mescaline, serotonin, etc.) are usually classed as amines rather than alkaloids." []
+is_a: class_20
+
+[Term]
+id: class_148
+name: carbohydrate phosphate
+is_a: class_43
+is_a: class_74
+is_a: class_76
+
+[Term]
+id: class_149
+name: hydroxy monocarboxylic acid
+def: "Any monocarboxylic acid which also contains a separate (alcoholic or phenolic) hydroxy substituent." []
+is_a: class_139
+is_a: class_79
+
+[Term]
+id: class_15
+name: pnictogen molecular entity
+def: "A p-block molecular entity containing any pnictogen." []
+is_a: class_3
+
+[Term]
+id: class_150
+name: proteinogenic amino acid derivative
+def: "Any derivative of a proteinogenic amino acid resulting from reaction at an amino group, carboxy group, or a side-chain functional group, or from the replacement of any hydrogen by a heteroatom." []
+is_a: class_112
+
+[Term]
+id: class_151
+name: hydroxy steroid
+is_a: class_111
+is_a: class_31
+
+[Term]
+id: class_152
+name: monocarboxylic acid amide
+def: "A carboxamide derived from a monocarboxylic acid." []
+is_a: class_53
+
+[Term]
+id: class_153
+name: chlorobenzenes
+def: "Any organochlorine compound containing a benzene ring which is substituted by one or more chlorines." []
+is_a: class_104
+is_a: class_89
+
+[Term]
+id: class_154
+name: primary alcohol
+def: "A primary alcohol is a compound in which a hydroxy group, ‒OH, is attached to a saturated carbon atom which has either three hydrogen atoms attached to it or only one other carbon atom and two hydrogen atoms attached to it." []
+is_a: class_64
+
+[Term]
+id: class_155
+name: flavonoid
+def: "Any member of the 'superclass' flavonoids whose skeleton is based on 1-benzopyran with an aryl substituent at position 2. The term was originally restricted to natural products, but is now also used to describe semi-synthetic and fully synthetic compounds." []
+is_a: class_126
+
+[Term]
+id: class_156
+name: inorganic molecular entity
+def: "A molecular entity that contains no carbon." []
+is_a: class_1
+
+[Term]
+id: class_157
+name: sphingolipid
+def: "Sphingolipids are a complex family of compounds that share a common structural feature, a sphingoid base backbone." []
+is_a: class_12
+is_a: class_20
+is_a: class_29
+
+[Term]
+id: class_158
+name: hydrocarbon
+def: "A compound consisting of carbon and hydrogen only." []
+is_a: class_130
+
+[Term]
+id: class_159
+name: cyclic ether
+def: "Any ether in which the oxygen atom forms part of a ring." []
+is_a: class_56
+is_a: class_70
+
+[Term]
+id: class_16
+name: cyclic compound
+def: "Any molecule that consists of a series of atoms joined together to form a ring." []
+is_a: class_13
+
+[Term]
+id: class_160
+name: tertiary alcohol
+def: "A tertiary alcohol is a compound in which a hydroxy group, ‒OH, is attached to a saturated carbon atom which has three other carbon atoms attached to it." []
+is_a: class_64
+
+[Term]
+id: class_161
+name: hexoside
+is_a: class_101
+
+[Term]
+id: class_162
+name: unsaturated fatty acid
+def: "Any fatty acid containing at least one C=C or C≡C bond." []
+is_a: class_123
+
+[Term]
+id: class_163
+name: aminopurine
+def: "Any purine having at least one amino substituent." []
+is_a: class_129
+
+[Term]
+id: class_164
+name: organosulfur heterocyclic compound
+is_a: class_26
+is_a: class_84
+
+[Term]
+id: class_165
+name: benzopyran
+is_a: class_39
+is_a: class_56
+
+[Term]
+id: class_166
+name: oligosaccharide
+def: "A compound in which monosaccharide units are joined by glycosidic linkages. The term is commonly used to refer to a defined structure as opposed to a polymer of unspecified length or a homologous mixture. When the linkages are of other types the compounds are regarded as oligosaccharide analogues." []
+is_a: class_115
+is_a: class_85
+
+[Term]
+id: class_167
+name: long-chain fatty acid
+def: "A fatty acid with a chain length ranging from C<small><sub>13</sub></small> to C<small><sub>22</sub></small>." []
+is_a: class_123
+
+[Term]
+id: class_168
+name: thiocarboxylic ester
+def: "An ester in which one or both oxygens of an ester group have been replaced by divalent sulfur." []
+is_a: class_33
+is_a: class_84
+
+[Term]
+id: class_169
+name: alpha,beta-unsaturated ketone
+def: "A ketone of general formula R<small><sup>1</small></sup>R<small><sup>2</small></sup>C=CR<small><sup>3</small></sup>‒C(=O)R<small><sup>4</small></sup> (R<small><sup>4</small></sup> ≠ H) or R<small><sup>1</small></sup>C≡C‒C(=O)R<small><sup>2</small></sup> (R<small><sup>2</small></sup> ≠ H) in which the ketonic C=O function is conjugated to an unsaturated C-C bond at the α,β position." []
+is_a: class_80
+
+[Term]
+id: class_17
+name: organic cyclic compound
+def: "Any organic molecule that consists of atoms connected in the form of a ring." []
+is_a: class_14
+is_a: class_16
+
+[Term]
+id: class_170
+name: enone
+def: "An α,β-unsaturated ketone of general formula R<small><sup>1</small></sup>R<small><sup>2</small></sup>C=CR<small><sup>3</small></sup>‒C(=O)R<small><sup>4</small></sup> (R<small><sup>4</small></sup> ≠ H) in which the C=O function is conjugated to a C=C double bond at the α,β position." []
+is_a: class_169
+is_a: class_87
+
+[Term]
+id: class_171
+name: glucosamine oligosaccharide
+is_a: class_108
+
+[Term]
+id: class_172
+name: thioester
+def: "A compound of general formula RC(=O)SR'. Compare with thionoester, RC(=S)OR'." []
+is_a: class_168
+is_a: class_23
+
+[Term]
+id: class_173
+name: non-proteinogenic amino acid
+def: "Any amino-acid that is not naturally encoded in the genetic code of any organism." []
+is_a: class_142
+
+[Term]
+id: class_174
+name: glycerophospholipid
+def: "Any glycerolipid having a phosphate group ester-linked to a terminal carbon of the glycerol backbone." []
+is_a: class_124
+is_a: class_134
+
+[Term]
+id: class_175
+name: fatty acid anion
+def: "The conjugate base of a fatty acid, arising from deprotonation of the carboxylic acid group of the corresponding fatty acid." []
+is_a: class_29
+is_a: class_95
+
+[Term]
+id: class_176
+name: alpha-amino acid
+def: "An amino acid in which the amino group is located on the carbon atom at the position α to the carboxy group." []
+is_a: class_142
+
+[Term]
+id: class_177
+name: 6-aminopurines
+def: "Any compound having 6-aminopurine (adenine) as part of its structure." []
+is_a: class_163
+
+[Term]
+id: class_178
+name: 1-benzopyran
+is_a: class_165
+
+[Term]
+id: class_179
+name: transition element molecular entity
+def: "A molecular entity containing one or more atoms of a transition element." []
+is_a: class_1
+
+[Term]
+id: class_18
+name: nitrogen molecular entity
+is_a: class_15
+
+[Term]
+id: class_180
+name: aromatic amine
+def: "An amino compound in which the amino group is linked directly to an aromatic system." []
+is_a: class_28
+is_a: class_55
+
+[Term]
+id: class_181
+name: quaternary nitrogen compound
+def: "A nitrogen molecular entity that is electronically neutral but which contains a quaternary nitrogen." []
+is_a: class_20
+
+[Term]
+id: class_182
+name: acyl-CoA
+def: "A thioester that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any carboxylic acid." []
+is_a: class_117
+is_a: class_144
+is_a: class_172
+is_a: class_177
+
+[Term]
+id: class_183
+name: pyridines
+def: "Any organonitrogen heterocyclic compound based on a pyridine skeleton and its substituted derivatives." []
+is_a: class_36
+is_a: class_69
+
+[Term]
+id: class_184
+name: glucoside
+is_a: class_161
+
+[Term]
+id: class_185
+name: D-glucoside
+def: "Any glucoside in which the glycoside group is derived from <small>D</small>-glucose." []
+is_a: class_184
+
+[Term]
+id: class_186
+name: non-proteinogenic alpha-amino acid
+def: "Any  α-amino acid which is not a member of the group of 23 proteinogenic amino acids." []
+is_a: class_173
+is_a: class_176
+
+[Term]
+id: class_187
+name: onium betaine
+def: "Neutral molecules having charge-separated forms with an onium atom which bears no hydrogen atoms and that is not adjacent to the anionic atom." []
+is_a: class_122
+
+[Term]
+id: class_188
+name: d-block molecular entity
+def: "A d-block molecular entity is a molecular entity containing one or more atoms of a d-block element." []
+is_a: class_179
+
+[Term]
+id: class_189
+name: dicarboxylic acids and O-substituted derivatives
+def: "A class of carbonyl compound encompassing dicarboxylic acids and any derivatives obtained by substitution of either one or both of the carboxy hydrogens." []
+is_a: class_23
+
+[Term]
+id: class_19
+name: s-block molecular entity
+def: "An s-block molecular entity is a molecular entity containing one or more atoms of an s-block element." []
+is_a: class_2
+
+[Term]
+id: class_190
+name: carbobicyclic compound
+def: "A bicyclic compound in which all the ring atoms are carbon." []
+is_a: class_127
+is_a: class_61
+
+[Term]
+id: class_191
+name: acyl-CoA oxoanion
+def: "Any acyl coenzyme A thioester in which one or more of the phosphate and/or diphosphate groups has been deprotonated." []
+is_a: class_94
+
+[Term]
+id: class_192
+name: halide salt
+is_a: class_106
+is_a: class_75
+
+[Term]
+id: class_193
+name: acetate ester
+def: "Any carboxylic ester where the carboxylic acid component is acetic acid." []
+is_a: class_57
+
+[Term]
+id: class_194
+name: triterpenoid
+def: "Any terpenoid derived from a triterpene. The term includes compounds in which the C30 skeleton of the parent triterpene has been rearranged or modified by the removal of one or more skeletal atoms (generally methyl groups)." []
+is_a: class_92
+
+[Term]
+id: class_195
+name: diterpenoid
+def: "Any terpenoid derived from a diterpene. The term includes compounds in which the C20 skeleton of the parent diterpene has been rearranged or modified by the removal of one or more skeletal atoms (generally methyl groups)." []
+is_a: class_92
+
+[Term]
+id: class_196
+name: disaccharide derivative
+def: "A carbohydrate derivative that is formally obtained from a disaccharide." []
+is_a: class_43
+
+[Term]
+id: class_197
+name: quaternary ammonium ion
+def: "A derivative of ammonium, NH<small><sub>4</sub></small><small><sup>+</small></sup>, in which all four of the hydrogens bonded to nitrogen have been replaced with univalent (usually organyl) groups." []
+is_a: class_105
+is_a: class_120
+
+[Term]
+id: class_198
+name: aldehyde
+def: "A compound RC(=O)H, in which a carbonyl group is bonded to one hydrogen atom and to one R group." []
+is_a: class_23
+
+[Term]
+id: class_199
+name: beta-glucoside
+def: "A glucoside in which the anomeric carbon of the glycosidic bond is in a β configuration" []
+is_a: class_184
+
+[Term]
+id: class_2
+name: main group molecular entity
+def: "A molecular entity containing one or more atoms from any of groups 1, 2, 13, 14, 15, 16, 17, and 18 of the periodic table." []
+is_a: class_1
+
+[Term]
+id: class_20
+name: organonitrogen compound
+def: "Any heteroorganic entity containing at least one carbon-nitrogen bond." []
+is_a: class_18
+is_a: class_9
+
+[Term]
+id: class_200
+name: beta-D-glucoside
+def: "Any <small>D</small>-glucoside in which the anomeric centre has β-configuration." []
+is_a: class_185
+is_a: class_199
+
+[Term]
+id: class_201
+name: coordination entity
+def: "An assembly consisting of a central atom (usually metallic) to which is attached a surrounding array of other groups of atoms (ligands)." []
+is_a: class_10
+
+[Term]
+id: class_202
+name: ammonium betaine
+def: "Any neutral molecule having charge-separated forms with a quaternary ammonium atom which bears no hydrogen atoms and that is not adjacent to the anionic atom." []
+is_a: class_181
+is_a: class_187
+
+[Term]
+id: class_203
+name: polycyclic heteroarene
+is_a: class_62
+
+[Term]
+id: class_204
+name: hydroxy monocarboxylic acid anion
+def: "Any monocarboxylic acid anion carrying at least one hydroxy substituent." []
+is_a: class_95
+
+[Term]
+id: class_205
+name: organic halide salt
+is_a: class_121
+
+[Term]
+id: class_206
+name: methyl ester
+def: "Any carboxylic ester resulting from the formal condensation of a carboxy group with methanol." []
+is_a: class_57
+
+[Term]
+id: class_207
+name: diazines
+def: "Any organic heterocyclic compound containing a benzene ring in which two of the C-H fragments have been replaced by isolobal nitrogens (the diazine parent structure)." []
+is_a: class_36
+is_a: class_69
+
+[Term]
+id: class_208
+name: liposaccharide
+is_a: class_29
+is_a: class_43
+
+[Term]
+id: class_209
+name: glycolipid
+def: "Any member of class of 1,2-di-<em>O</em>-acylglycerols joined at oxygen 3 by a glycosidic linkage to a carbohydrate part (usually a mono-, di- or tri-saccharide). Some substances classified as bacterial glycolipids have the sugar part acylated by one or more fatty acids and the glycerol part may be absent." []
+is_a: class_208
+
+[Term]
+id: class_21
+name: hydrogen molecular entity
+is_a: class_19
+
+[Term]
+id: class_210
+name: polyphenol
+def: "Members of the class of phenols that contain 2 or more benzene rings each of which is substituted by at least one hydroxy group." []
+is_a: class_90
+
+[Term]
+id: class_211
+name: acyl-CoA(4-)
+def: "An acyl-CoA oxoanion arising from deprotonation of the phosphate and diphosphate OH groups of any acyl-CoA; major species at pH 7.3." []
+is_a: class_191
+
+[Term]
+id: class_212
+name: sulfuric acid derivative
+is_a: class_133
+
+[Term]
+id: class_213
+name: hydroxy fatty acid
+def: "Any fatty acid carrying one or more hydroxy substituents." []
+is_a: class_123
+is_a: class_149
+
+[Term]
+id: class_214
+name: polyunsaturated fatty acid
+def: "Any fatty acid containing more than one double bond. Acids in this group are reported to have cardioprotective effects; and levels are lowered in chronic fatigue syndrome." []
+is_a: class_162
+
+[Term]
+id: class_215
+name: dipeptide
+def: "Any molecule that contains two amino-acid residues connected by peptide linkages." []
+is_a: class_145
+
+[Term]
+id: class_216
+name: benzopyrrole
+is_a: class_203
+is_a: class_36
+is_a: class_82
+
+[Term]
+id: class_217
+name: sulfates
+def: "Salts and esters of sulfuric acid" []
+is_a: class_212
+
+[Term]
+id: class_218
+name: sulfonic acid derivative
+is_a: class_133
+
+[Term]
+id: class_219
+name: secondary amino compound
+def: "A compound formally derived from ammonia by replacing two hydrogen atoms by organyl groups." []
+is_a: class_55
+
+[Term]
+id: class_22
+name: organic oxo compound
+def: "Organic compounds containing an oxygen atom, =O, doubly bonded to carbon or another element." []
+is_a: class_14
+
+[Term]
+id: class_220
+name: dicarboxylic acid
+def: "Any carboxylic acid containing two carboxy groups." []
+is_a: class_189
+is_a: class_51
+
+[Term]
+id: class_221
+name: ceramide
+def: "Ceramides (<em>N</em>-acyl-sphingoid bases) are a major subclass of sphingoid base derivatives with an amide-linked fatty acid. The fatty acids are typically saturated or monounsaturated with chain lengths from 14 to 26 carbon atoms; the presence of a hydroxyl group on carbon 2 is fairly common. Ceramides are generally precursors of more complex sphingolipids. In the illustrated generalised structure, R<small><sup>1</small></sup> = OH, OX (where X = acyl, glycosyl, phosphate, phosphonate, etc.), or H." []
+is_a: class_157
+is_a: class_53
+
+[Term]
+id: class_222
+name: methoxybenzenes
+def: "Any aromatic ether that consists of a benzene skeleton substituted with one or more methoxy groups." []
+is_a: class_102
+is_a: class_89
+
+[Term]
+id: class_223
+name: macrocycle
+def: "A cyclic compound containing nine or more atoms as part of the cyclic system." []
+is_a: class_16
+
+[Term]
+id: class_224
+name: acetamides
+def: "Compounds with the general formula RNHC(=O)CH<small><sub>3</sub></small>." []
+is_a: class_53
+
+[Term]
+id: class_225
+name: chloride salt
+is_a: class_192
+is_a: class_93
+
+[Term]
+id: class_226
+name: monochlorobenzenes
+def: "Any member of the class of chlorobenzenes containing a mono- or poly-substituted benzene ring in which only one substituent is chlorine." []
+is_a: class_153
+
+[Term]
+id: class_227
+name: phospho sugar
+def: "Any monosaccharide containing an alcoholic hydroxy group esterified with phosphoric acid." []
+is_a: class_109
+is_a: class_148
+
+[Term]
+id: class_228
+name: benzenediols
+is_a: class_90
+
+[Term]
+id: class_229
+name: alkali metal molecular entity
+def: "A molecular entity containing one or more atoms of an alkali metal." []
+is_a: class_19
+
+[Term]
+id: class_23
+name: carbonyl compound
+def: "Any compound containing the carbonyl group, C=O. The term is commonly used in the restricted sense of aldehydes and ketones, although it actually includes carboxylic acids and derivatives." []
+is_a: class_12
+is_a: class_22
+
+[Term]
+id: class_230
+name: oxo steroid
+is_a: class_111
+is_a: class_80
+
+[Term]
+id: class_231
+name: indoles
+def: "Any compound containing an indole skeleton." []
+is_a: class_216
+
+[Term]
+id: class_232
+name: epoxide
+def: "Any cyclic ether in which the oxygen atom forms part of a 3-membered ring." []
+is_a: class_159
+
+[Term]
+id: class_233
+name: cyclic amide
+is_a: class_42
+
+[Term]
+id: class_234
+name: lactam
+def: "Cyclic amides of amino carboxylic acids, having a 1-azacycloalkan-2-one structure, or analogues having unsaturation or heteroatoms replacing one or more carbon atoms of the ring." []
+is_a: class_233
+is_a: class_36
+is_a: class_53
+
+[Term]
+id: class_235
+name: pyrimidines
+def: "Any compound having a pyrimidine as part of its structure." []
+is_a: class_207
+
+[Term]
+id: class_236
+name: aromatic amide
+def: "An amide in which the amide linkage is bonded directly to an aromatic system." []
+is_a: class_28
+is_a: class_42
+
+[Term]
+id: class_237
+name: fatty acid ester
+def: "A carboxylic ester in which the carboxylic acid component can be any fatty acid." []
+is_a: class_57
+is_a: class_98
+
+[Term]
+id: class_238
+name: 3-hydroxy steroid
+def: "Any hydroxy steroid carrying a hydroxy group at position 3." []
+is_a: class_151
+
+[Term]
+id: class_239
+name: alkali metal salt
+is_a: class_106
+is_a: class_229
+
+[Term]
+id: class_24
+name: hydroxides
+def: "Hydroxides are chemical compounds containing a hydroxy group or salts containing hydroxide (OH<small><sup>−</small></sup>)." []
+is_a: class_10
+is_a: class_21
+is_a: class_8
+
+[Term]
+id: class_240
+name: diazole
+def: "An azole that is either one of a pair of heterocyclic organic compounds comprising three carbon atoms and two nitrogen atoms arranged in a ring." []
+is_a: class_140
+
+[Term]
+id: class_241
+name: cholines
+def: "A quaternary ammonium ion based on the choline ion and its substituted derivatives thereof." []
+is_a: class_197
+
+[Term]
+id: class_242
+name: fatty acyl-CoA
+def: "An acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any fatty acid." []
+is_a: class_182
+is_a: class_98
+
+[Term]
+id: class_243
+name: diol
+def: "A compound that contains two hydroxy groups, generally assumed to be, but not necessarily, alcoholic. Aliphatic diols are also called glycols." []
+is_a: class_132
+
+[Term]
+id: class_244
+name: choline ester
+is_a: class_33
+
+[Term]
+id: class_245
+name: polyketide
+def: "Natural and synthetic compounds containing alternating carbonyl and methylene groups ('β-polyketones'), biogenetically derived from repeated condensation of acetyl coenzyme A (via malonyl coenzyme A), and usually the compounds derived from them by further condensations, etc. Considered by many to be synonymous with the less frequently used terms acetogenins and ketides." []
+is_a: class_12
+
+[Term]
+id: class_246
+name: phosphocholines
+def: "Any compound having phosphocholine as part of its structure." []
+is_a: class_241
+is_a: class_244
+is_a: class_74
+is_a: class_76
+
+[Term]
+id: class_247
+name: unsaturated fatty acid anion
+def: "Any fatty acid anion containing at least one C-C unsaturated bond; formed by deprotonation of the carboxylic acid moiety." []
+is_a: class_175
+
+[Term]
+id: class_248
+name: gamma-lactone
+def: "A lactone having a five-membered lactone ring." []
+is_a: class_118
+
+[Term]
+id: class_249
+name: organic chloride salt
+is_a: class_205
+is_a: class_225
+
+[Term]
+id: class_25
+name: heterocyclic compound
+def: "A cyclic compound having as ring members atoms of at least two different elements." []
+is_a: class_16
+
+[Term]
+id: class_250
+name: organic sulfate
+def: "Compounds of the general formula SO3HOR where R is an organyl group" []
+is_a: class_212
+is_a: class_217
+
+[Term]
+id: class_251
+name: anthoxanthin
+def: "are a type of flavonoid pigments in plants. Anthoxanthins are water-soluble pigments which range in color from white or colorless to a creamy to yellow, often on petals of flowers." []
+is_a: class_155
+
+[Term]
+id: class_252
+name: flavones
+def: "A member of the class of flavonoid with a 2-aryl-1-benzopyran-4-one (2-arylchromen-4-one) skeleton and its substituted derivatives." []
+is_a: class_155
+is_a: class_251
+
+[Term]
+id: class_253
+name: dicarboxylic acid anion
+is_a: class_83
+
+[Term]
+id: class_254
+name: aromatic ketone
+def: "A ketone in which the carbonyl group is attached to an aromatic ring." []
+is_a: class_80
+
+[Term]
+id: class_255
+name: oxo carboxylic acid
+def: "Any compound that has an aldehydic or ketonic group as well as a carboxylic acid group in the same molecule." []
+is_a: class_51
+
+[Term]
+id: class_256
+name: long-chain fatty acid anion
+def: "A fatty acid anion with a chain length of C<small><sub>13</sub></small> to C<small><sub>22</sub></small>." []
+is_a: class_175
+
+[Term]
+id: class_257
+name: transition element coordination entity
+is_a: class_179
+is_a: class_201
+
+[Term]
+id: class_258
+name: sesquiterpenoid
+def: "Any terpenoid derived from a sesquiterpene. The term includes compounds in which the C15 skeleton of the parent sesquiterpene has been rearranged or modified by the removal of one or more skeletal atoms (generally methyl groups)." []
+is_a: class_92
+
+[Term]
+id: class_259
+name: oxolanes
+def: "Any oxacycle having an oxolane (tetrahydrofuran) skeleton." []
+is_a: class_56
+is_a: class_69
+
+[Term]
+id: class_26
+name: organic heterocyclic compound
+def: "A cyclic compound having as ring members atoms of carbon and at least of one other element." []
+is_a: class_17
+is_a: class_25
+is_a: class_9
+
+[Term]
+id: class_260
+name: alpha-hydroxy ketone
+def: "A ketone containing a hydroxy group on the α-carbon relative to the C=O group." []
+is_a: class_31
+is_a: class_80
+
+[Term]
+id: class_261
+name: nitro compound
+def: "A compound having a nitro group, ‒NO<small><sub>2</sub></small> (free valence on nitrogen), which may be attached to carbon, nitrogen (as in nitramines), or oxygen (as in nitrates), among other elements (in the absence of specification, <em>C</em>-nitro compounds are usually implied)." []
+is_a: class_18
+
+[Term]
+id: class_262
+name: aromatic carboxylic acid
+def: "Any carboxylic acid in which the carboxy group is directly bonded to an aromatic ring." []
+is_a: class_28
+is_a: class_51
+
+[Term]
+id: class_263
+name: bromine molecular entity
+is_a: class_71
+
+[Term]
+id: class_264
+name: primary amino compound
+def: "A compound formally derived from ammonia by replacing one hydrogen atom by an organyl group." []
+is_a: class_55
+
+[Term]
+id: class_265
+name: sulfuric ester
+def: "An ester of an alcohol and sulfuric acid." []
+is_a: class_212
+is_a: class_33
+
+[Term]
+id: class_266
+name: terpene
+def: "A hydrocarbon of biological origin having carbon skeleton formally derived from isoprene [CH<small><sub>2</sub></small>=C(CH<small><sub>3</sub></small>)CH=CH<small><sub>2</sub></small>]." []
+is_a: class_158
+is_a: class_86
+
+[Term]
+id: class_267
+name: C-nitro compound
+def: "A nitro compound having the nitro group (‒NO<small><sub>2</sub></small>) attached to a carbon atom." []
+is_a: class_14
+is_a: class_261
+
+[Term]
+id: class_268
+name: aldose phosphate
+is_a: class_227
+
+[Term]
+id: class_269
+name: sulfide
+def: "Any sulfur molecular entity that involves either covalently bonded or anionic sulfur." []
+is_a: class_60
+
+[Term]
+id: class_27
+name: aromatic compound
+def: "A cyclically conjugated molecular entity with a stability (due to delocalization) significantly greater than that of a hypothetical localized structure (e.g. Kekulé structure) is said to possess aromatic character." []
+is_a: class_16
+
+[Term]
+id: class_270
+name: hydroxyflavone
+def: "Any flavone in which one or more ring hydrogens are replaced by hydroxy groups." []
+is_a: class_252
+is_a: class_31
+
+[Term]
+id: class_271
+name: sodium molecular entity
+is_a: class_229
+
+[Term]
+id: class_272
+name: trisaccharide derivative
+def: "An oligosaccharide derivative that is formally obtained from a trisaccharide." []
+is_a: class_100
+
+[Term]
+id: class_273
+name: organic sulfide
+def: "Compounds having the structure RSR (R ≠ H). Such compounds were once called thioethers." []
+is_a: class_269
+is_a: class_84
+
+[Term]
+id: class_274
+name: sodium salt
+def: "Any alkali metal salt having sodium(1+) as the cation." []
+is_a: class_239
+is_a: class_271
+
+[Term]
+id: class_275
+name: monosaccharide
+def: "Parent monosaccharides are polyhydroxy aldehydes H[CH(OH)]<small><sub><em>n</em></sub></small>C(=O)H or polyhydroxy ketones H‒[CHOH]<small><sub><em>n</em></sub></small>‒C(=O)[CHOH]<small><sub><em>m</em></sub></small>‒H with three or more carbon atoms. The generic term 'monosaccharide' (as opposed to oligosaccharide or polysaccharide) denotes a single unit, without glycosidic connection to other such units. It includes aldoses, dialdoses, aldoketoses, ketoses and diketoses, as well as deoxy sugars, provided that the parent compound has a (potential) carbonyl group." []
+is_a: class_115
+
+[Term]
+id: class_276
+name: amino sugar
+def: "Any sugar having one or more alcoholic hydroxy groups replaced by substituted or unsubstituted amino groups." []
+is_a: class_43
+
+[Term]
+id: class_277
+name: fatty acyl-CoA(4-)
+def: "An acyl-CoA(4−) arising from deprotonation of the phosphate and diphosphate OH groups of any fatty acyl-CoA; major species at pH 7.3." []
+is_a: class_211
+
+[Term]
+id: class_278
+name: hydrochloride
+def: "A salt formally resulting from the reaction of hydrochloric acid with an organic base." []
+is_a: class_249
+
+[Term]
+id: class_279
+name: carbotricyclic compound
+def: "A carbopolyclic compound comprising of three carbocyclic rings." []
+is_a: class_107
+is_a: class_127
+
+[Term]
+id: class_28
+name: organic aromatic compound
+is_a: class_17
+is_a: class_27
+
+[Term]
+id: class_280
+name: organic heterotetracyclic compound
+is_a: class_39
+
+[Term]
+id: class_281
+name: furans
+def: "Compounds containing at least one furan ring." []
+is_a: class_56
+is_a: class_69
+
+[Term]
+id: class_282
+name: nucleotide
+def: "A nucleotide is a nucleoside phosphate resulting from the condensation of the 3 or 5 hydroxy group of a nucleoside with phosphoric acid." []
+is_a: class_116
+
+[Term]
+id: class_283
+name: quinone
+def: "Compounds having a fully conjugated cyclic dione structure, such as that of benzoquinones, derived from aromatic compounds by conversion of an even number of ‒CH= groups into ‒C(=O)‒ groups with any necessary rearrangement of double bonds (polycyclic and heterocyclic analogues are included)." []
+is_a: class_96
+
+[Term]
+id: class_284
+name: pentose derivative
+def: "A monosaccharide derivative that is formally obtained from a pentose." []
+is_a: class_109
+
+[Term]
+id: class_285
+name: anionic phospholipid
+def: "Any organophosphate oxoanion that is a negatively charged phospholipid, e.g. phosphatidylserine(1−), phosphatidate(2−), phosphatidylglycerol(1−)." []
+is_a: class_94
+
+[Term]
+id: class_286
+name: N-glycosyl compound
+def: "A glycosyl compound arising formally from the elimination of water from a glycosidic hydroxy group and an H atom bound to a nitrogen atom, thus creating a C-N bond." []
+is_a: class_20
+is_a: class_43
+is_a: class_91
+
+[Term]
+id: class_287
+name: piperidines
+is_a: class_36
+is_a: class_69
+
+[Term]
+id: class_288
+name: alpha,beta-unsaturated monocarboxylic acid
+def: "A monocarboxylic acid in which the carbon of the carboxy group is directly attached to a C=C or C≡C bond." []
+is_a: class_79
+
+[Term]
+id: class_289
+name: 3-oxo steroid
+def: "Any oxo steroid where an oxo substituent is located at position 3." []
+is_a: class_230
+is_a: class_96
+
+[Term]
+id: class_29
+name: lipid
+def: "'Lipids' is a loosely defined term for substances of biological origin that are soluble in nonpolar solvents. They consist of saponifiable lipids, such as glycerides (fats and oils) and phospholipids, as well as nonsaponifiable lipids, principally steroids." []
+is_a: class_5
+
+[Term]
+id: class_290
+name: glycerophosphocholine
+def: "The glycerol phosphate ester of a phosphocholine. A nutrient with many different roles in human health." []
+is_a: class_174
+is_a: class_246
+
+[Term]
+id: class_291
+name: pentose phosphate
+def: "Any phospho sugar that is the phosphate derivative of pentose." []
+is_a: class_227
+is_a: class_284
+
+[Term]
+id: class_292
+name: organic sodium salt
+is_a: class_121
+is_a: class_274
+
+[Term]
+id: class_293
+name: aldopentose phosphate
+is_a: class_268
+is_a: class_291
+
+[Term]
+id: class_294
+name: amino-acid zwitterion
+def: "The zwitterionic form of an amino acid having a negatively charged carboxyl group and a positively charged amino group." []
+is_a: class_122
+
+[Term]
+id: class_295
+name: carboxylic acid dianion
+def: "Any dianion containing at least one carboxy group." []
+is_a: class_83
+
+[Term]
+id: class_296
+name: benzoic acids
+def: "Any aromatic carboxylic acid that consists of benzene in which at least a single hydrogen has been substituted by a carboxy group." []
+is_a: class_262
+is_a: class_89
+
+[Term]
+id: class_297
+name: dicarboxylic acid dianion
+def: "A carboxylic acid dianion obtained by deprotonation of both carboxy groups of any dicarboxylic acid." []
+is_a: class_253
+is_a: class_295
+
+[Term]
+id: class_298
+name: disaccharide
+def: "A compound in which two monosaccharides are joined by a glycosidic bond." []
+is_a: class_166
+
+[Term]
+id: class_299
+name: organobromine compound
+def: "A compound containing at least one carbon-bromine bond." []
+is_a: class_263
+is_a: class_88
+
+[Term]
+id: class_3
+name: p-block molecular entity
+def: "A main group molecular entity that contains one or more atoms of a p-block element." []
+is_a: class_2
+
+[Term]
+id: class_30
+name: polycyclic compound
+is_a: class_16
+
+[Term]
+id: class_300
+name: polyunsaturated fatty acid anion
+def: "Any unsaturated fatty acid anion containing more than one C-C unsaturated bond.  Major species at pH 7.3." []
+is_a: class_247
+
+[Term]
+id: class_301
+name: cyanides
+def: "Salts and <em>C</em>-organyl derivatives of hydrogen cyanide, HC≡N." []
+is_a: class_20
+
+[Term]
+id: class_302
+name: volatile organic compound
+def: "Any organic compound having an initial boiling point less than or equal to 250 °C (482 °F) measured at a standard atmospheric pressure of 101.3 kPa." []
+is_a: class_14
+
+[Term]
+id: class_303
+name: L-alpha-amino acid
+def: "Any α-amino acid having <small>L</small>-configuration at the α-carbon." []
+is_a: class_176
+
+[Term]
+id: class_304
+name: nitrile
+def: "A compound having the structure RC≡N; thus a <em>C</em>-substituted derivative of hydrocyanic acid, HC≡N. In systematic nomenclature, the suffix nitrile denotes the triply bound ≡N atom, not the carbon atom attached to it." []
+is_a: class_301
+
+[Term]
+id: class_305
+name: aromatic ester
+def: "An ester where the ester linkage is bonded directly to an aromatic system." []
+is_a: class_28
+is_a: class_33
+
+[Term]
+id: class_306
+name: monomethoxybenzene
+def: "Compounds containing a benzene skeleton substituted with one methoxy group." []
+is_a: class_222
+
+[Term]
+id: class_307
+name: icosanoid
+def: "Any member of the group of signalling molecules arising from oxidation of the three C<small><sub>20</sub></small> essential fatty acids (EFAs) icosapentaenoic acid (EPA), arachidonic acid (AA) and dihomo-gamma-linolenic acid (DGLA)." []
+is_a: class_98
+
+[Term]
+id: class_308
+name: 3beta-hydroxy steroid
+def: "A 3-hydroxy steroid in which the 3-hydroxy substituent is in the  β-position." []
+is_a: class_238
+is_a: class_99
+
+[Term]
+id: class_309
+name: hydroxy fatty acid anion
+def: "The conjugate base of any hydroxy fatty acid, formed by deprotonation of the carboxylic acid moiety." []
+is_a: class_175
+is_a: class_204
+
+[Term]
+id: class_31
+name: organic hydroxy compound
+def: "An organic compound having at least one hydroxy group attached to a carbon atom." []
+is_a: class_24
+is_a: class_5
+
+[Term]
+id: class_310
+name: alicyclic ketone
+def: "A cyclic ketone in which the carbocyclic ring structure which may be saturated or unsaturated, but may not be a benzenoid or other aromatic system." []
+is_a: class_96
+
+[Term]
+id: class_311
+name: organic heteropentacyclic compound
+is_a: class_39
+
+[Term]
+id: class_312
+name: dichlorobenzene
+def: "Any member of the class of chlorobenzenes carrying two chloro groups at unspecified positions." []
+is_a: class_153
+
+[Term]
+id: class_313
+name: aliphatic compound
+def: "Any acyclic or cyclic, saturated or unsaturated carbon compound, excluding aromatic compounds." []
+is_a: class_5
+
+[Term]
+id: class_314
+name: oxo monocarboxylic acid
+def: "Any monocarboxylic acid having at least one additional oxo functional group." []
+is_a: class_255
+is_a: class_79
+
+[Term]
+id: class_315
+name: alpha,beta-unsaturated carboxylic ester
+def: "A carboxylic ester of general formula R<small><sup>1</small></sup>R<small><sup>2</small></sup>C=CR<small><sup>3</small></sup>‒C(=O)OR<small><sup>4</small></sup> (R<small><sup>4</small></sup> ≠ H) or R<small><sup>1</small></sup>C≡C‒C(=O)OR<small><sup>2</small></sup> (R<small><sup>2</small></sup> ≠ H) in which the ester C=O function is conjugated to an unsaturated C-C bond at the α,β position." []
+is_a: class_57
+
+[Term]
+id: class_316
+name: straight-chain fatty acid
+def: "Any fatty acid whose skeletal carbon atoms form an unbranched open chain." []
+is_a: class_123
+
+[Term]
+id: class_317
+name: unsaturated fatty acyl-CoA
+def: "A fatty acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any unsaturated fatty acid." []
+is_a: class_242
+
+[Term]
+id: class_318
+name: non-proteinogenic L-alpha-amino acid
+def: "Any <small>L</small>-α-amino acid which is not a member of the group of 23 proteinogenic amino acids." []
+is_a: class_186
+is_a: class_303
+
+[Term]
+id: class_319
+name: tetrasaccharide derivative
+def: "An oligosaccharide derivative that is formally obtained from a tetrasaccharide." []
+is_a: class_100
+
+[Term]
+id: class_32
+name: ion
+def: "A molecular entity having a net electric charge." []
+is_a: class_1
+
+[Term]
+id: class_320
+name: enoate ester
+def: "An α,β-unsaturated carboxylic ester of general formula R<small><sup>1</small></sup>R<small><sup>2</small></sup>C=CR<small><sup>3</small></sup>‒C(=O)OR<small><sup>4</small></sup> (R<small><sup>4</small></sup> ≠ H) in which the ester C=O function is conjugated to a C=C double bond at the α,β position." []
+is_a: class_315
+is_a: class_87
+
+[Term]
+id: class_321
+name: pentacyclic triterpenoid
+is_a: class_194
+is_a: class_78
+
+[Term]
+id: class_322
+name: glycosphingolipid
+def: "A glycosphingolipid is a glycolipid that is a carbohydrate-containing derivative of a sphingoid or ceramide. It is understood that the carbohydrate residue is attached by a glycosidic linkage to O-1 of the sphingoid." []
+is_a: class_157
+is_a: class_209
+
+[Term]
+id: class_323
+name: triol
+def: "A chemical compound containing three hydroxy groups." []
+is_a: class_132
+
+[Term]
+id: class_324
+name: flavans
+def: "Any flavonoid with a 3,4-dihydro-2-aryl-2<em>H</em>-1-benzopyran skeleton and its substituted derivatives." []
+is_a: class_143
+is_a: class_155
+is_a: class_178
+
+[Term]
+id: class_325
+name: naphthalenes
+def: "Any benzenoid aromatic compound having a skeleton composed of two <em>ortho</em>-fused benzene rings." []
+is_a: class_190
+is_a: class_77
+
+[Term]
+id: class_326
+name: amino disaccharide
+def: "A disaccharide derivative that is a disaccharide having one or more substituted or unsubstituted amino groups in place of hydroxy groups at unspecified positions." []
+is_a: class_108
+is_a: class_196
+
+[Term]
+id: class_327
+name: indole alkaloid
+def: "An alkaloid containing an indole skeleton." []
+is_a: class_147
+
+[Term]
+id: class_328
+name: bridged compound
+def: "A polycyclic compound that contains more than one ring with at least two common atoms (also known as bridgehead carbons) that are not adjacent to each other." []
+is_a: class_30
+
+[Term]
+id: class_329
+name: macromolecule
+def: "A macromolecule is a molecule of high relative molecular mass, the structure of which essentially comprises the multiple repetition of units derived, actually or conceptually, from molecules of low relative molecular mass." []
+is_a: class_6
+
+[Term]
+id: class_33
+name: ester
+def: "A compound formally derived from an oxoacid R<small><sub><em>k</em></sub></small>E(=O)<small><sub><em>l</em></sub></small>(OH)<small><sub><em>m</em></sub></small> (<em>l</em> > 0) and an alcohol, phenol, heteroarenol, or enol by linking with formal loss of water from an acidic hydroxy group of the former and a hydroxy group of the latter." []
+is_a: class_12
+
+[Term]
+id: class_330
+name: amino trisaccharide
+def: "An amino oligosaccharide that is a trisaccharide having one or more substituted or unsubstituted amino groups in place of hydroxy groups at unspecified positions." []
+is_a: class_108
+is_a: class_272
+
+[Term]
+id: class_331
+name: pyrrolidines
+def: "Any of a class of heterocyclic amines having a saturated five-membered ring." []
+is_a: class_36
+is_a: class_69
+
+[Term]
+id: class_332
+name: monoterpenoid
+def: "Any terpenoid derived from a monoterpene. The term includes compounds in which the C<small><sub>10</sub></small> skeleton of the parent monoterpene has been rearranged or modified by the removal of one or more skeletal atoms (generally methyl groups)." []
+is_a: class_92
+
+[Term]
+id: class_333
+name: aliphatic alcohol
+def: "An  alcohol derived from an aliphatic compound." []
+is_a: class_64
+
+[Term]
+id: class_334
+name: ureas
+is_a: class_45
+
+[Term]
+id: class_335
+name: ring assembly
+def: "Two or more cyclic systems (single rings or fused systems) which are directly joined to each other by double or single bonds are named ring assemblies when the number of such direct ring junctions is one less than the number of cyclic systems involved." []
+is_a: class_16
+
+[Term]
+id: class_336
+name: benzoate ester
+def: "Esters of benzoic acid or substituted benzoic acids." []
+is_a: class_305
+is_a: class_57
+
+[Term]
+id: class_337
+name: oxo carboxylic acid anion
+def: "Any carboxylic acid anion containing at least one oxo group." []
+is_a: class_83
+
+[Term]
+id: class_338
+name: polypyrrole
+def: "A compound composed of two or more pyrrole units." []
+is_a: class_36
+
+[Term]
+id: class_339
+name: amino-acid anion
+is_a: class_20
+is_a: class_83
+
+[Term]
+id: class_34
+name: organic ion
+is_a: class_32
+is_a: class_5
+
+[Term]
+id: class_340
+name: delta-lactone
+def: "A lactone having a six-membered lactone ring." []
+is_a: class_118
+
+[Term]
+id: class_341
+name: olefin
+def: "Acyclic and cyclic hydrocarbons having one or more carbon-carbon double bonds, apart from the formal ones in aromatic compounds. The class olefins subsumes alkenes and cycloalkenes and the corresponding polyenes." []
+is_a: class_158
+is_a: class_87
+
+[Term]
+id: class_342
+name: imidazoles
+def: "A five-membered organic heterocycle containing two nitrogen atoms at positions 1 and 3, or any of its derivatives; compounds containing an imidazole skeleton." []
+is_a: class_240
+
+[Term]
+id: class_343
+name: amine
+def: "A compound formally derived from ammonia by replacing one, two or three hydrogen atoms by hydrocarbyl groups." []
+is_a: class_55
+
+[Term]
+id: class_344
+name: ribose phosphate
+is_a: class_293
+
+[Term]
+id: class_345
+name: chalcogen oxoanion
+is_a: class_66
+is_a: class_7
+
+[Term]
+id: class_346
+name: elemental molecular entity
+def: "A molecular entity all atoms of which have the same atomic number." []
+is_a: class_1
+
+[Term]
+id: class_347
+name: fatty alcohol
+def: "An aliphatic alcohol consisting of a chain of 3 to greater than 27 carbon atoms. Fatty alcohols may be saturated or unsaturated and may be branched or unbranched." []
+is_a: class_64
+is_a: class_98
+
+[Term]
+id: class_348
+name: cyclic hydrocarbon
+is_a: class_158
+is_a: class_59
+
+[Term]
+id: class_349
+name: N-acylsphingoid
+def: "A ceramide consisting of an undefined sphingoid base linked to an undefined fatty acid via an amide bond." []
+is_a: class_221
+
+[Term]
+id: class_35
+name: carbohydrates and carbohydrate derivatives
+def: "Any organooxygen compound that is a polyhydroxy-aldehyde or -ketone, or a compound derived from one. Carbohydrates contain only carbon, hydrogen and oxygen and usually have an empirical formula C<small><sub><em>m</em></sub></small>(H<small><sub>2</sub></small>O)<small><sub><em>n</em></sub></small>; carbohydrate derivatives may contain other elements by substitution or condensation." []
+is_a: class_12
+
+[Term]
+id: class_350
+name: fluorobenzenes
+def: "Any fluoroarene that is a benzene or a substituted benzene carrying at least one fluoro group." []
+is_a: class_141
+is_a: class_89
+
+[Term]
+id: class_351
+name: glyceride
+def: "Any ester resulting from the condensation of one or more of the hydroxy groups of glycerol (propane-1,2,3-triol) with fatty acids." []
+is_a: class_134
+is_a: class_57
+
+[Term]
+id: class_352
+name: olefinic fatty acid
+def: "Any fatty acid containing at least one C=C double bond." []
+is_a: class_162
+is_a: class_87
+
+[Term]
+id: class_353
+name: trisaccharide
+is_a: class_166
+
+[Term]
+id: class_354
+name: catechols
+def: "Any compound containing an <em>o</em>-diphenol component." []
+is_a: class_228
+
+[Term]
+id: class_355
+name: carbohydrate sulfate
+is_a: class_250
+is_a: class_265
+is_a: class_43
+
+[Term]
+id: class_356
+name: sulfonamide
+def: "An amide of a sulfonic acid RS(=O)<small><sub>2</sub></small>NR'<small><sub>2</sub></small>." []
+is_a: class_218
+is_a: class_45
+is_a: class_84
+
+[Term]
+id: class_357
+name: sulfur oxoanion
+is_a: class_345
+is_a: class_60
+
+[Term]
+id: class_358
+name: deoxy hexoside
+is_a: class_101
+
+[Term]
+id: class_359
+name: saponin
+def: "A glycoside that is a compound containing one or more hydrophilic glycoside moieties combined with a lipophilic triterpenoid or steroid derivative. Found in particular abundance in plant species." []
+is_a: class_101
+
+[Term]
+id: class_36
+name: organonitrogen heterocyclic compound
+def: "Any organonitrogen compound containing a cyclic component with nitrogen and at least one other element as ring member atoms." []
+is_a: class_20
+is_a: class_26
+
+[Term]
+id: class_360
+name: organosulfonic acid
+def: "An organic derivative of sulfonic acid in which the sulfo group is linked directly to carbon." []
+is_a: class_218
+is_a: class_44
+is_a: class_84
+
+[Term]
+id: class_361
+name: piperazines
+is_a: class_36
+is_a: class_69
+
+[Term]
+id: class_362
+name: macrocyclic lactone
+def: "Any lactone in which the cyclic carboxylic ester group forms a part of a cyclic macromolecule." []
+is_a: class_118
+is_a: class_223
+
+[Term]
+id: class_363
+name: heterocyclic antibiotic
+is_a: class_26
+
+[Term]
+id: class_364
+name: quinolines
+def: "A class of aromatic heterocyclic compounds each of which contains a benzene ring <em>ortho</em> fused to carbons 2 and 3 of a pyridine ring." []
+is_a: class_28
+is_a: class_36
+
+[Term]
+id: class_365
+name: inorganic ion
+is_a: class_156
+is_a: class_32
+
+[Term]
+id: class_366
+name: atom
+def: "A chemical entity constituting the smallest component of an element having the chemical properties of the element." []
+is_a: class_0
+
+[Term]
+id: class_367
+name: hydroxy polyunsaturated fatty acid
+def: "Any polyunsaturated fatty acid carrying one or more hydroxy substituents." []
+is_a: class_213
+is_a: class_214
+
+[Term]
+id: class_368
+name: icosanoid anion
+def: "The carboxylic acid anion that is the conjugate base of an icosanoid, formed when the carboxy group is deprotonated." []
+is_a: class_83
+
+[Term]
+id: class_369
+name: 3-oxo-Delta(4) steroid
+def: "A 3-oxo steroid conjugated to a C=C double bond at the α,β position." []
+is_a: class_170
+is_a: class_289
+
+[Term]
+id: class_37
+name: oxoacid derivative
+is_a: class_10
+
+[Term]
+id: class_370
+name: nucleotide conjugate
+is_a: class_144
+
+[Term]
+id: class_371
+name: biaryl
+def: "An organic aromatic compound whose structure contains two aromatic rings or ring systems, joined to each other by a single bond." []
+is_a: class_28
+
+[Term]
+id: class_372
+name: alpha-amino-acid anion
+def: "An amino-acid anion obtained by deprotonation of any α-amino acid." []
+is_a: class_339
+
+[Term]
+id: class_373
+name: tetrahydrofuranol
+is_a: class_259
+
+[Term]
+id: class_374
+name: anilines
+def: "Any  aromatic amine that is benzene carrying at least one amino substituent and its substituted derivatives." []
+is_a: class_180
+is_a: class_89
+
+[Term]
+id: class_375
+name: aldose
+def: "Aldehydic parent sugars (polyhydroxy aldehydes H[CH(OH)]<small><sub><em>n</em></sub></small>C(=O)H, <em>n</em> ≥ 2) and their intramolecular hemiacetals." []
+is_a: class_275
+
+[Term]
+id: class_376
+name: carbamate ester
+def: "Any ester of carbamic acid or its <em>N</em>-substituted derivatives." []
+is_a: class_57
+
+[Term]
+id: class_377
+name: organonitrogen heterocyclic antibiotic
+is_a: class_36
+is_a: class_363
+
+[Term]
+id: class_378
+name: oxo monocarboxylic acid anion
+is_a: class_337
+is_a: class_95
+
+[Term]
+id: class_379
+name: tetrapyrrole
+def: "A natural pigment containing four pyrrole rings joined by one-carbon units linking position 2 of one pyrrole ring to position 5 of the next." []
+is_a: class_338
+is_a: class_62
+
+[Term]
+id: class_38
+name: anion
+def: "A monoatomic or polyatomic species having one or more elementary charges of the electron." []
+is_a: class_32
+
+[Term]
+id: class_380
+name: carbohydrate acid derivative
+def: "A carbohydrate derivative that is formally obtained from a carbohydrate acid." []
+is_a: class_43
+
+[Term]
+id: class_381
+name: nucleotide-carbohydrate
+is_a: class_370
+is_a: class_43
+
+[Term]
+id: class_382
+name: substituted aniline
+is_a: class_374
+
+[Term]
+id: class_383
+name: alditol derivative
+def: "A carbohydrate derivative that is formally obtained from an alditol." []
+is_a: class_43
+
+[Term]
+id: class_384
+name: amino alcohol
+def: "An alcohol containing an amino functional group in addition to the alcohol-defining hydroxy group." []
+is_a: class_55
+is_a: class_64
+
+[Term]
+id: class_385
+name: arenecarboxamide
+def: "A monocarboxylic acid amide in which the amide linkage is bonded directly to an arene ring system." []
+is_a: class_152
+is_a: class_236
+
+[Term]
+id: class_386
+name: monounsaturated fatty acid
+def: "Any fatty acid with one double or triple bond in the fatty acid chain and singly bonded carbon atoms in the rest of the chain. MUFAs have positive effects on the cardiovascular system, and in diabetes treatment." []
+is_a: class_162
+
+[Term]
+id: class_387
+name: spiro compound
+def: "A compound having one atom as the only common member of two rings." []
+is_a: class_30
+
+[Term]
+id: class_388
+name: allylic alcohol
+def: "An alcohol where the hydroxy group is attached to a saturated carbon atom adjacent to a double bond (R groups may be H, organyl, etc.)." []
+is_a: class_64
+is_a: class_87
+
+[Term]
+id: class_389
+name: flavanones
+def: "Members of the class of flavans with a 3,4-dihydro-2-aryl-2<em>H</em>-1-benzopyran-4-one skeleton and its substituted derivatives." []
+is_a: class_324
+is_a: class_96
+
+[Term]
+id: class_39
+name: organic heteropolycyclic compound
+is_a: class_26
+is_a: class_40
+
+[Term]
+id: class_390
+name: nucleotide-sugar
+is_a: class_109
+is_a: class_381
+
+[Term]
+id: class_391
+name: benzamides
+is_a: class_385
+
+[Term]
+id: class_392
+name: tertiary alpha-hydroxy ketone
+def: "An α-hydroxy ketone in which the carbonyl group and the hydroxy group are linked by a carbon bearing two organyl groups." []
+is_a: class_160
+is_a: class_260
+
+[Term]
+id: class_393
+name: N-acyl-amino acid
+def: "A carboxamide resulting from the formal condensation of a carboxylic acid with the amino group of an amino acid." []
+is_a: class_112
+is_a: class_51
+is_a: class_53
+
+[Term]
+id: class_394
+name: pyrazoles
+is_a: class_240
+
+[Term]
+id: class_395
+name: 17-hydroxy steroid
+def: "A hydroxy steroid carrying a hydroxy group at position 17." []
+is_a: class_151
+
+[Term]
+id: class_396
+name: hexose
+def: "Any six-carbon monosaccharide which in its linear form contains either an aldehyde group at position 1 (aldohexose) or a ketone group at position 2 (ketohexose)." []
+is_a: class_275
+
+[Term]
+id: class_397
+name: ribonucleotide
+is_a: class_282
+is_a: class_344
+
+[Term]
+id: class_398
+name: galactosamine oligosaccharide
+is_a: class_108
+
+[Term]
+id: class_399
+name: nucleotide-sugar oxoanion
+def: "Any nucleotide-sugar in which one or more of the diphosphate OH groups has been deprotonated." []
+is_a: class_94
+
+[Term]
+id: class_4
+name: carbon group molecular entity
+is_a: class_3
+
+[Term]
+id: class_40
+name: heteropolycyclic compound
+def: "A polycyclic compound in which at least one of the rings contains at least one non-carbon atom." []
+is_a: class_25
+is_a: class_30
+
+[Term]
+id: class_400
+name: amino tetrasaccharide
+def: "A tetrasaccharide derivative having one or more substituted or unsubstituted amino groups in place of hydroxy groups at unspecified positions." []
+is_a: class_108
+is_a: class_319
+
+[Term]
+id: class_401
+name: ammonium compound
+def: "Compounds (NH<small><sub>4</sub></small><small><sup>+</small></sup>)Y<small><sup>−</small></sup> and derivatives, in which one or more of the hydrogens bonded to nitrogen have been replaced with univalent groups." []
+is_a: class_18
+
+[Term]
+id: class_402
+name: addition compound
+def: "An addition compound contains two or more simpler compounds that can be packed in a definite ratio into a crystal. The term covers donor-acceptor complexes (adducts) and a variety of lattice compounds." []
+is_a: class_10
+
+[Term]
+id: class_403
+name: terpene glycoside
+def: "A terpenoid in which one or more hydroxy functions are glycosylated." []
+is_a: class_101
+is_a: class_92
+
+[Term]
+id: class_404
+name: purine nucleotide
+def: "Any nucleotide that has a purine nucleobase." []
+is_a: class_129
+is_a: class_282
+
+[Term]
+id: class_405
+name: terpene lactone
+is_a: class_118
+is_a: class_92
+
+[Term]
+id: class_406
+name: mononucleotide
+is_a: class_282
+
+[Term]
+id: class_407
+name: cyclopropanes
+def: "Cyclopropane and its derivatives formed by substitution." []
+is_a: class_59
+
+[Term]
+id: class_408
+name: hydrate
+def: "An addition compound that contains water in weak chemical combination with another compound." []
+is_a: class_402
+
+[Term]
+id: class_409
+name: organosulfonate oxoanion
+def: "An organic anion obtained by deprotonation of the sufonate group(s) of any organosulfonic acid." []
+is_a: class_41
+
+[Term]
+id: class_41
+name: organic anion
+def: "Any organic ion with a net negative charge." []
+is_a: class_34
+is_a: class_38
+
+[Term]
+id: class_410
+name: phenylalanine derivative
+def: "An amino acid derivative resulting from reaction of alanine at the amino group or the carboxy group, or from the replacement of any hydrogen of phenylalanine  by a heteroatom. The definition normally excludes peptides containing phenylalanine  residues." []
+is_a: class_112
+
+[Term]
+id: class_411
+name: phosphosphingolipid
+is_a: class_124
+is_a: class_157
+
+[Term]
+id: class_412
+name: nucleoside
+def: "An <em>N</em>-glycosyl compound that has both a nucleobase, normally adenine, guanine, xanthine, thymine, cytosine or uracil, and either a ribose or deoxyribose as functional parents." []
+is_a: class_103
+is_a: class_259
+is_a: class_286
+
+[Term]
+id: class_413
+name: p-quinones
+def: "A quinone in which the two oxo groups of the quinone are located <em>para</em> to each other on the 6-membered quinonoid ring." []
+is_a: class_283
+
+[Term]
+id: class_414
+name: heterocyclic organic fundamental parent
+is_a: class_130
+
+[Term]
+id: class_415
+name: glycophospholipid
+def: "Any phospholipid that contain both phosphate and carbohydrate as integral structural components." []
+is_a: class_124
+is_a: class_209
+
+[Term]
+id: class_416
+name: phosphatidylcholine
+def: "A glycerophosphocholine that is glycero-3-phosphocholine bearing two acyl substituents at positions 1 and 2." []
+is_a: class_202
+is_a: class_290
+
+[Term]
+id: class_417
+name: carbohydrate acid derivative anion
+def: "A carboxylic acid anion resulting from the deprotonation of the carboxy group of a carbohydrate acid derivative." []
+is_a: class_83
+
+[Term]
+id: class_418
+name: hydroxyflavanone
+def: "A member of the class of flavanones that consists of flavanone with one or more hydroxy substituents." []
+is_a: class_31
+is_a: class_389
+
+[Term]
+id: class_419
+name: dibenzopyran
+def: "Any organic heteropolycyclic compound based on a skeleton consisting of a pyran ring fused with two benzene rings." []
+is_a: class_39
+is_a: class_56
+
+[Term]
+id: class_42
+name: amide
+def: "An amide is a derivative of an oxoacid R<small><sub><em>k</em></sub></small>E(=O)<small><sub><em>l</em></sub></small>(OH)<small><sub><em>m</em></sub></small> (<em>l</em> ≠ 0) in which an acidic hydroxy group has been replaced by an amino or substituted amino group." []
+is_a: class_18
+
+[Term]
+id: class_420
+name: 1,2-diacyl-sn-glycero-3-phosphocholine
+def: "The conjugate base of a 1,2-diacyl-<em>sn</em>-glycero-3-phosphocholine compound formed by deprotonation of the phosphate OH group." []
+is_a: class_202
+is_a: class_290
+is_a: class_416
+
+[Term]
+id: class_421
+name: isoprenoid phosphate
+is_a: class_124
+
+[Term]
+id: class_422
+name: xanthenes
+is_a: class_419
+
+[Term]
+id: class_423
+name: alkyl alcohol
+def: "An aliphatic alcohol in which the aliphatic alkane chain is substituted by a hydroxy group at unspecified position." []
+is_a: class_333
+
+[Term]
+id: class_424
+name: acenes
+def: "Polycyclic aromatic hydrocarbons consisting of fused benzene rings in a rectilinear arrangement and their substitution derivatives." []
+is_a: class_77
+
+[Term]
+id: class_425
+name: glycosyloxyflavone
+def: "A member of the class of flavones having one or more glycosyl residues attached at unspecified positions." []
+is_a: class_101
+is_a: class_252
+
+[Term]
+id: class_426
+name: monofluorobenzenes
+def: "Any member of the class of fluorobenzenes containing a mono- or poly-substituted benzene ring carrying a single fluorine substitutent." []
+is_a: class_350
+
+[Term]
+id: class_427
+name: cyclic polypyrrole
+is_a: class_338
+
+[Term]
+id: class_428
+name: beta-lactam
+def: "A lactam in which the amide bond is contained within a four-membered ring, which includes the amide nitrogen and the carbonyl carbon." []
+is_a: class_234
+
+[Term]
+id: class_429
+name: enol
+def: "Alkenols; the term refers specifically to vinylic alcohols, which have the structure HOCR'=CR<small><sub>2</sub></small>. Enols are tautomeric with aldehydes (R' = H) or ketones (R' ≠ H)." []
+is_a: class_31
+is_a: class_87
+
+[Term]
+id: class_43
+name: carbohydrate derivative
+def: "Any organooxygen compound derived from a carbohydrate by replacement of one or more hydroxy group(s) by an amino group, a thiol group or similar heteroatomic groups. The term also includes derivatives of these compounds." []
+is_a: class_35
+
+[Term]
+id: class_430
+name: nucleoside 5'-phosphate
+def: "A ribosyl or deoxyribosyl derivative of a pyrimidine or purine base in which C-5 of the ribose ring is mono-, di-, tri- or tetra-phosphorylated." []
+is_a: class_406
+
+[Term]
+id: class_431
+name: terpenyl phosphate
+is_a: class_421
+is_a: class_92
+
+[Term]
+id: class_432
+name: chromenes
+is_a: class_178
+
+[Term]
+id: class_433
+name: sesquiterpene
+def: "A C<small><sub>15</sub></small> terpene." []
+is_a: class_266
+
+[Term]
+id: class_434
+name: alicyclic compound
+def: "An aliphatic compound having a carbocyclic ring structure which may be saturated or unsaturated, but may not be a benzenoid or other aromatic system." []
+is_a: class_313
+is_a: class_59
+
+[Term]
+id: class_435
+name: methyl ketone
+def: "A ketone of formula RC(=O)CH<small><sub>3</sub></small> (R ≠ H)." []
+is_a: class_80
+
+[Term]
+id: class_436
+name: terpene ketone
+def: "Any terpenoid which contains a keto group." []
+is_a: class_80
+is_a: class_92
+
+[Term]
+id: class_437
+name: radical
+def: "A molecular entity possessing an unpaired electron." []
+is_a: class_1
+
+[Term]
+id: class_438
+name: tripeptide
+def: "Any oligopeptide that consists of three amino-acid residues connected by peptide linkages." []
+is_a: class_145
+
+[Term]
+id: class_439
+name: ethyl ester
+def: "Any carboxylic ester resulting from the formal condensation of the carboxy group of a carboxylic acid with ethanol." []
+is_a: class_57
+
+[Term]
+id: class_44
+name: organic acid
+def: "Any organic molecular entity that is acidic and contains carbon in covalent linkage." []
+is_a: class_5
+
+[Term]
+id: class_440
+name: long-chain fatty acyl-CoA
+def: "A fatty acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any long-chain (C<small><sub>13</sub></small> to C<small><sub>22</sub></small>) fatty acid." []
+is_a: class_242
+
+[Term]
+id: class_441
+name: neutral glycosphingolipid
+def: "Any glycosphingolipid containing unsubstituted glycosyl moieties." []
+is_a: class_322
+
+[Term]
+id: class_442
+name: isoquinoline alkaloid
+def: "Any alkaloid that has a structure based on an isoquinoline nucleus. They are derived from the amino acids like tyrosine and phenylalanine." []
+is_a: class_147
+
+[Term]
+id: class_443
+name: acetal
+def: "An organooxygen compound having the structure RR'C(OR'')(OR''') (R'', R''' ≠ H). Mixed acetals have R'' and R''' groups which differ." []
+is_a: class_12
+
+[Term]
+id: class_444
+name: inorganic hydride
+is_a: class_113
+is_a: class_156
+
+[Term]
+id: class_445
+name: secondary alpha-hydroxy ketone
+def: "An α-hydroxy ketone in which the carbonyl group and the hydroxy group are linked by a carbon bearing one hydrogen and one organyl group. Secondary α-hydroxy ketones are also known as acyloins, and are formally derived from reductive coupling of two carboxylic acid groups." []
+is_a: class_260
+is_a: class_99
+
+[Term]
+id: class_446
+name: boron group molecular entity
+is_a: class_3
+
+[Term]
+id: class_447
+name: pentasaccharide derivative
+def: "An oligosaccharide derivative that is formally obtained from a pentasaccharide." []
+is_a: class_100
+
+[Term]
+id: class_448
+name: oligosaccharide sulfate
+def: "Any  carbohydrate sulfate that is an oligosaccharide carrying at least one <em>O</em>-sulfo substituent." []
+is_a: class_100
+is_a: class_355
+
+[Term]
+id: class_449
+name: cyclic tetrapyrrole
+is_a: class_379
+is_a: class_427
+
+[Term]
+id: class_45
+name: primary amide
+def: "A derivative of an oxoacid R<small><sub><em>k</em></sub></small>E(=O)<small><sub><em>l</em></sub></small>(OH)<small><sub><em>m</em></sub></small> (<em>l</em> ≠ 0) in which an acidic hydroxy group has been replaced by an amino or substituted amino group." []
+is_a: class_42
+
+[Term]
+id: class_450
+name: cyclic terpene ketone
+def: "An alicyclic ketone in which the carbocyclic ring structure forms part of a terpene skeleton." []
+is_a: class_310
+is_a: class_436
+
+[Term]
+id: class_451
+name: beta-lactam antibiotic
+def: "An organonitrogen heterocyclic antibiotic that contains a β-lactam ring." []
+is_a: class_377
+is_a: class_428
+
+[Term]
+id: class_452
+name: iodine molecular entity
+is_a: class_71
+
+[Term]
+id: class_453
+name: methoxyflavone
+def: "Any member of the class of flavones with at least one methoxy substituent." []
+is_a: class_252
+is_a: class_70
+
+[Term]
+id: class_454
+name: 3-hydroxy carboxylic acid
+def: "Any hydroxy carboxylic acid which contains a hydroxy group located β- to the carboxylic acid group." []
+is_a: class_139
+
+[Term]
+id: class_455
+name: natural product fundamental parent
+is_a: class_130
+
+[Term]
+id: class_456
+name: thiazoles
+def: "An azole in which the five-membered heterocyclic aromatic skeleton contains a N atom and one S atom." []
+is_a: class_140
+is_a: class_164
+
+[Term]
+id: class_457
+name: prenol phosphate
+is_a: class_421
+
+[Term]
+id: class_458
+name: acetylenic compound
+def: "Any organic molecule containing a C≡C bond." []
+is_a: class_14
+
+[Term]
+id: class_459
+name: macrolide
+def: "A macrocyclic lactone with a ring of twelve or more members derived from a polyketide." []
+is_a: class_245
+is_a: class_362
+
+[Term]
+id: class_46
+name: phosphorus molecular entity
+is_a: class_15
+
+[Term]
+id: class_460
+name: organic tetracyclic compound
+is_a: class_78
+
+[Term]
+id: class_461
+name: polyprenol phosphate
+def: "A prenol phosphate resulting from the formal condensation of the terminal allylic hydroxy group of a polyprenol with 1 mol eq. of phosphoric acid." []
+is_a: class_431
+is_a: class_457
+
+[Term]
+id: class_462
+name: monoatomic entity
+def: "A monoatomic entity is a molecular entity consisting of a single atom." []
+is_a: class_346
+
+[Term]
+id: class_463
+name: benzofurans
+is_a: class_39
+is_a: class_56
+
+[Term]
+id: class_464
+name: inorganic salt
+is_a: class_106
+is_a: class_156
+
+[Term]
+id: class_465
+name: pyrimidine nucleotide-sugar
+def: "A nucleotide-sugar whose nucleobase is a pyrimidine." []
+is_a: class_390
+
+[Term]
+id: class_466
+name: 1,3-thiazoles
+is_a: class_456
+
+[Term]
+id: class_467
+name: iron group molecular entity
+is_a: class_179
+is_a: class_188
+
+[Term]
+id: class_468
+name: polyether
+def: "Any ether that contains more than one ether linkage." []
+is_a: class_70
+
+[Term]
+id: class_469
+name: triterpenoid saponin
+def: "A terpene glycoside in which the terpene moiety is a triterpenoid." []
+is_a: class_359
+is_a: class_403
+
+[Term]
+id: class_47
+name: oxoacid
+def: "A compound which contains oxygen, at least one other element, and at least one hydrogen bound to oxygen, and which produces a conjugate base by loss of positive hydrogen ion(s) (hydrons)." []
+is_a: class_24
+
+[Term]
+id: class_470
+name: organosulfate oxoanion
+def: "An organic anion of general formula RS(=O)2O(−) where R is an organyl group." []
+is_a: class_357
+is_a: class_41
+
+[Term]
+id: class_471
+name: oxaspiro compound
+def: "A spiro compound in which at least one of the cyclic components is an oxygen heterocyle." []
+is_a: class_387
+
+[Term]
+id: class_472
+name: sterol
+def: "Any 3-hydroxy steroid whose skeleton is closely related to cholestan-3-ol (additional carbon atoms may be present in the side chain)." []
+is_a: class_238
+
+[Term]
+id: class_473
+name: non-proteinogenic amino acid derivative
+def: "Any derivative of a non-proteinogenic amino acid resulting from reaction at an amino group or carboxy group, or from the replacement of any hydrogen by a heteroatom." []
+is_a: class_112
+
+[Term]
+id: class_474
+name: chemical substance
+def: "A chemical substance is a portion of matter of constant composition, composed of molecular entities of the same type or of different types." []
+is_a: class_0
+
+[Term]
+id: class_475
+name: aldohexose
+def: "A hexose with a (potential) aldehyde group at one end." []
+is_a: class_375
+is_a: class_396
+
+[Term]
+id: class_476
+name: aminopyrimidine
+def: "A member of the class of  pyrimidines that is pyrimidine substituted by at least one amino group and its derivatives." []
+is_a: class_180
+is_a: class_235
+
+[Term]
+id: class_477
+name: long-chain fatty acyl-CoA(4-)
+def: "A fatty acyl-CoA(4−) arising from deprotonation of the phosphate and diphosphate OH groups of any long-chain fatty acyl-CoA; major species at pH 7.3." []
+is_a: class_277
+
+[Term]
+id: class_478
+name: organoammonium salt
+is_a: class_401
+
+[Term]
+id: class_479
+name: cyclitol
+def: "A polyol consisting of a cycloalkane containing at least three hydroxy groups, each attached to a different ring carbon atom." []
+is_a: class_132
+
+[Term]
+id: class_48
+name: phosphorus oxoacids and derivatives
+is_a: class_46
+
+[Term]
+id: class_480
+name: cyclic olefin
+def: "The inclusive term for any cyclic hydrocarbon having any number of double bonds." []
+is_a: class_341
+is_a: class_434
+
+[Term]
+id: class_481
+name: metal atom
+def: "An atom of an element that exhibits typical metallic properties, being typically shiny, with high electrical and thermal conductivity." []
+is_a: class_366
+
+[Term]
+id: class_482
+name: resorcinols
+def: "Any benzenediol in which the two hydroxy groups are <em>meta</em> to one another." []
+is_a: class_228
+
+[Term]
+id: class_483
+name: hydroxyacyl-CoA
+def: "An acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of any hydroxycarboxylic acid." []
+is_a: class_182
+
+[Term]
+id: class_484
+name: tetracyclic triterpenoid
+def: "Any triterpenoid consisting of a tetracyclic skeleton." []
+is_a: class_194
+is_a: class_460
+
+[Term]
+id: class_485
+name: cyclic peptide
+is_a: class_110
+
+[Term]
+id: class_486
+name: purine ribonucleotide
+def: "Any ribonucleotide that has a purine nucleobase." []
+is_a: class_397
+is_a: class_404
+
+[Term]
+id: class_487
+name: triazoles
+def: "An azole in which the five-membered heterocyclic aromatic skeleton contains three N atoms and two C atoms." []
+is_a: class_140
+
+[Term]
+id: class_488
+name: steroid ester
+is_a: class_111
+is_a: class_33
+
+[Term]
+id: class_489
+name: cinnamate ester
+is_a: class_143
+is_a: class_320
+
+[Term]
+id: class_49
+name: phosphorus oxoacid derivative
+is_a: class_37
+is_a: class_48
+
+[Term]
+id: class_490
+name: guanidines
+def: "Any organonitrogen compound containing a carbamimidamido (guanidino) group. Guanidines have the general structure (R<small><sup>1</small></sup>R<small><sup>2</small></sup>N)(R<small><sup>3</small></sup>R<small><sup>4</small></sup>N)C=N-R<small><sup>5</small></sup> and are related structurally to amidines and ureas." []
+is_a: class_20
+
+[Term]
+id: class_491
+name: carbohydrate acid
+is_a: class_115
+is_a: class_51
+
+[Term]
+id: class_492
+name: phosphoethanolamine
+is_a: class_74
+is_a: class_76
+
+[Term]
+id: class_493
+name: 20-oxo steroid
+def: "An oxo steroid carrying an oxo group at position 20." []
+is_a: class_230
+
+[Term]
+id: class_494
+name: medium-chain fatty acid
+def: "Any fatty acid with a chain length of between C<small><sub>6</sub></small> and C<small><sub>12</sub></small>." []
+is_a: class_123
+
+[Term]
+id: class_495
+name: ascaroside
+def: "Any glycoside derived from α-ascarylopyranose or its derivatives." []
+is_a: class_101
+is_a: class_358
+
+[Term]
+id: class_496
+name: anthracenes
+def: "Compounds containing an anthracene skeleton." []
+is_a: class_279
+is_a: class_424
+
+[Term]
+id: class_497
+name: nucleoside 5'-monophosphate
+is_a: class_116
+
+[Term]
+id: class_498
+name: biomacromolecule
+def: "A macromolecule formed by a living organism." []
+is_a: class_329
+is_a: class_5
+
+[Term]
+id: class_499
+name: isoflavonoid
+def: "Any 1-benzopyran with an aryl substituent at position 3. The term was originally restricted to natural products, but is now also used to describe semi-synthetic and fully synthetic compounds." []
+is_a: class_126
+is_a: class_143
+is_a: class_178
+
+[Term]
+id: class_5
+name: organic molecular entity
+def: "Any molecular entity that contains carbon." []
+is_a: class_4
+
+[Term]
+id: class_50
+name: carbon oxoacid
+is_a: class_12
+is_a: class_47
+
+[Term]
+id: class_51
+name: carboxylic acid
+def: "A carbon oxoacid acid carrying at least one ‒C(=O)OH group and having the structure RC(=O)OH, where R is any any monovalent functional group. Carboxylic acids are the most common type of organic acid." []
+is_a: class_23
+is_a: class_44
+is_a: class_50
+
+[Term]
+id: class_52
+name: phosphoric acid derivative
+is_a: class_49
+
+[Term]
+id: class_53
+name: carboxamide
+def: "An amide of a carboxylic acid, having the structure RC(=O)NR<small><sub>2</sub></small>. The term is used as a suffix in systematic name formation to denote the ‒C(=O)NH<small><sub>2</sub></small> group including its carbon atom." []
+is_a: class_12
+is_a: class_20
+is_a: class_45
+
+[Term]
+id: class_54
+name: polyatomic ion
+def: "An ion consisting of more than one atom." []
+is_a: class_32
+is_a: class_6
+
+[Term]
+id: class_55
+name: organic amino compound
+def: "A compound formally derived from ammonia by replacing one, two or three hydrogen atoms by organyl groups." []
+is_a: class_20
+is_a: class_5
+
+[Term]
+id: class_56
+name: oxacycle
+def: "Any organic heterocyclic compound containing at least one ring oxygen atom." []
+is_a: class_12
+is_a: class_26
+
+[Term]
+id: class_57
+name: carboxylic ester
+def: "An ester of a carboxylic acid, R<small><sup>1</small></sup>C(=O)OR<small><sup>2</small></sup>, where R<small><sup>1</small></sup> = H or organyl and R<small><sup>2</small></sup> = organyl." []
+is_a: class_23
+is_a: class_33
+
+[Term]
+id: class_58
+name: homocyclic compound
+def: "A cyclic compound having as ring members atoms of the same element only." []
+is_a: class_16
+
+[Term]
+id: class_59
+name: carbocyclic compound
+def: "A homocyclic compound in which all of the ring members are carbon atoms." []
+is_a: class_17
+is_a: class_58
+
+[Term]
+id: class_6
+name: polyatomic entity
+def: "Any molecular entity consisting of more than one atom." []
+is_a: class_1
+
+[Term]
+id: class_60
+name: sulfur molecular entity
+is_a: class_7
+
+[Term]
+id: class_61
+name: bicyclic compound
+def: "A molecule that features two fused rings." []
+is_a: class_16
+
+[Term]
+id: class_62
+name: heteroarene
+def: "A heterocyclic compound formally derived from an arene by replacement of one or more methine (‒C=) and/or vinylene (‒CH=CH‒) groups by trivalent or divalent heteroatoms, respectively, in such a way as to maintain the continuous π-electron system characteristic of aromatic systems and a number of out-of-plane π-electrons corresponding to the Hückel rule (4<em>n</em>+2)." []
+is_a: class_26
+is_a: class_28
+
+[Term]
+id: class_63
+name: oxide
+def: "An oxide is a chemical compound of oxygen with other chemical elements." []
+is_a: class_10
+is_a: class_8
+
+[Term]
+id: class_64
+name: alcohol
+def: "A compound in which a hydroxy group, ‒OH, is attached to a saturated carbon atom." []
+is_a: class_31
+
+[Term]
+id: class_65
+name: polyatomic anion
+def: "An anion consisting of more than one atom." []
+is_a: class_38
+is_a: class_54
+
+[Term]
+id: class_66
+name: oxoanion
+def: "An oxoanion is an anion derived from an oxoacid by loss of hydron(s) bound to oxygen." []
+is_a: class_63
+is_a: class_65
+
+[Term]
+id: class_67
+name: monocyclic compound
+is_a: class_16
+
+[Term]
+id: class_68
+name: heteromonocyclic compound
+is_a: class_25
+is_a: class_67
+
+[Term]
+id: class_69
+name: organic heteromonocyclic compound
+is_a: class_26
+is_a: class_68
+
+[Term]
+id: class_7
+name: chalcogen molecular entity
+def: "Any p-block molecular entity containing a chalcogen." []
+is_a: class_3
+
+[Term]
+id: class_70
+name: ether
+def: "An organooxygen compound with formula ROR, where R is not hydrogen." []
+is_a: class_12
+
+[Term]
+id: class_71
+name: halogen molecular entity
+is_a: class_3
+
+[Term]
+id: class_72
+name: organophosphorus compound
+def: "An organophosphorus compound is formally a compound containing at least one carbon-phosphorus bond, but the term is often extended to include esters and thioesters." []
+is_a: class_46
+is_a: class_9
+
+[Term]
+id: class_73
+name: phosphate
+def: "Salts and esters of phosphoric and oligophosphoric acids and their chalcogen analogues. In inorganic chemistry, the term is also used to describe anionic coordination entities with phosphorus as central atom." []
+is_a: class_52
+
+[Term]
+id: class_74
+name: organic phosphate
+is_a: class_52
+is_a: class_72
+is_a: class_73
+
+[Term]
+id: class_75
+name: halide
+def: "Any heteroatomic molecular entity that is a chemical compound of halogen with other chemical elements." []
+is_a: class_10
+is_a: class_71
+
+[Term]
+id: class_76
+name: phosphoric ester
+is_a: class_33
+is_a: class_52
+
+[Term]
+id: class_77
+name: benzenoid aromatic compound
+is_a: class_28
+is_a: class_59
+
+[Term]
+id: class_78
+name: organic polycyclic compound
+is_a: class_17
+is_a: class_30
+
+[Term]
+id: class_79
+name: monocarboxylic acid
+def: "An oxoacid containing a single carboxy group." []
+is_a: class_51
+
+[Term]
+id: class_8
+name: oxygen molecular entity
+is_a: class_7
+
+[Term]
+id: class_80
+name: ketone
+def: "A compound in which a carbonyl group is bonded to two carbon atoms: R<small><sub>2</sub></small>C=O (neither R may be H)." []
+is_a: class_23
+
+[Term]
+id: class_81
+name: heterobicyclic compound
+def: "A bicyclic compound in which at least one of the rings contains at least one skeletal heteroatom." []
+is_a: class_25
+is_a: class_61
+
+[Term]
+id: class_82
+name: organic heterobicyclic compound
+is_a: class_39
+is_a: class_81
+
+[Term]
+id: class_83
+name: carboxylic acid anion
+def: "The conjugate base formed when the carboxy group of a carboxylic acid is deprotonated." []
+is_a: class_41
+is_a: class_66
+
+[Term]
+id: class_84
+name: organosulfur compound
+def: "An organosulfur compound is a compound containing at least one carbon-sulfur bond." []
+is_a: class_11
+is_a: class_60
+
+[Term]
+id: class_85
+name: glycan
+def: "Any oligosaccharide, polysaccharide or their derivatives consisting of monosaccharides or monosaccharide derivatives linked by glycosidic bonds. See also <a href=\"http://www.ontobee.org/ontology/GNO?iri=http://purl.obolibrary.org/obo/GNO_00000001\" target=\"_blank\">http://www.ontobee.org/ontology/GNO?iri=http://purl.obolibrary.org/obo/GNO_00000001</a>." []
+is_a: class_35
+
+[Term]
+id: class_86
+name: isoprenoid
+def: "Any lipid formally derived from isoprene (2-methylbuta-1,3-diene), the skeleton of which can generally be discerned in repeated occurrence in the molecule. The skeleton of isoprenoids may differ from strict additivity of isoprene units by loss or shift of a fragment, commonly a methyl group. The class includes both hydrocarbons and oxygenated derivatives." []
+is_a: class_29
+is_a: class_5
+
+[Term]
+id: class_87
+name: olefinic compound
+def: "Any organic molecular entity that contains at least one C=C bond." []
+is_a: class_5
+
+[Term]
+id: class_88
+name: organohalogen compound
+def: "A compound containing at least one carbon-halogen bond (where X is a halogen atom)." []
+is_a: class_75
+is_a: class_9
+
+[Term]
+id: class_89
+name: benzenes
+def: "Any benzenoid aromatic compound consisting of the benzene skeleton and its substituted derivatives." []
+is_a: class_77
+
+[Term]
+id: class_9
+name: heteroorganic entity
+def: "A heteroorganic entity is an organic molecular entity in which carbon atoms or organic groups are bonded directly to one or more heteroatoms." []
+is_a: class_5
+
+[Term]
+id: class_90
+name: phenols
+def: "Organic aromatic compounds having one or more hydroxy groups attached to a benzene or other arene ring." []
+is_a: class_28
+is_a: class_31
+
+[Term]
+id: class_91
+name: glycosyl compound
+def: "A carbohydrate derivative arising formally from the elimination of water from a glycosidic hydroxy group and an H atom bound to an oxygen, carbon, nitrogen or sulfur atom of a separate entity." []
+is_a: class_43
+
+[Term]
+id: class_92
+name: terpenoid
+def: "Any isoprenoid that is a natural product or related compound formally derived from isoprene units. Terpenoids may contain oxygen in various functional groups. This class is subdivided according to the number of carbon atoms in the parent terpene. The skeleton of terpenoids may differ from strict additivity of isoprene units by the loss or shift of a fragment, generally a methyl group." []
+is_a: class_86
+
+[Term]
+id: class_93
+name: chlorine molecular entity
+def: "A halogen molecular entity containing one or more atoms of chlorine." []
+is_a: class_71
+
+[Term]
+id: class_94
+name: organophosphate oxoanion
+def: "An organic phosphoric acid derivative in which one or more oxygen atoms of the phosphate group(s) has been deprotonated." []
+is_a: class_41
+is_a: class_52
+
+[Term]
+id: class_95
+name: monocarboxylic acid anion
+def: "A carboxylic acid anion formed when the carboxy group of a monocarboxylic acid is deprotonated." []
+is_a: class_83
+
+[Term]
+id: class_96
+name: cyclic ketone
+is_a: class_80
+
+[Term]
+id: class_97
+name: cation
+def: "A monoatomic or polyatomic species having one or more elementary charges of the proton." []
+is_a: class_32
+
+[Term]
+id: class_98
+name: fatty acid derivative
+def: "Any organic molecular entity derived from a fatty acid." []
+is_a: class_29
+
+[Term]
+id: class_99
+name: secondary alcohol
+def: "A secondary alcohol is a compound in which a hydroxy group, ‒OH, is attached to a saturated carbon atom which has two other carbon atoms attached to it." []
+is_a: class_64
