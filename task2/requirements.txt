@@ -1,0 +1,7 @@
+ruff>=0.15.6
+lancedb
+sentence-transformers
+transformers
+pandas
+pyarrow
+scikit-learn
