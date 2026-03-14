@@ -25,6 +25,7 @@ except ImportError:
     TREE_SITTER_AVAILABLE = False
 
 from src.llm_abstraction import CachedLLMAbstractor
+from src.import_resolver import ImportResolver
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,45 @@ class ContextAssembler:
                 )
                 context_items.append(item)
         
-        # 2. Retrieve seeds from hybrid retriever
+        # 2. Resolve imports from prefix - fetch definitions of imported symbols
+        # This is crucial: if code says "from .common import BasicFunctionality",
+        # we need to fetch the BasicFunctionality class definition
+        if prefix and hasattr(self.graph, 'get_entities_by_name'):
+            try:
+                resolver = ImportResolver(self.graph)
+                import_definitions = resolver.resolve_symbols_from_code(
+                    prefix, 
+                    current_file,
+                    max_definitions=5  # Limit to avoid token overflow
+                )
+                
+                if import_definitions:
+                    logger.info(f"Resolved {len(import_definitions)} import definitions")
+                    
+                    for entity in import_definitions:
+                        entity_id = entity.id if hasattr(entity, 'id') else str(entity)
+                        if entity_id in seen_entities:
+                            continue
+                        seen_entities.add(entity_id)
+                        
+                        # Use abstract for import definitions
+                        code = self._create_abstract(entity)
+                        tokens = self.estimate_tokens(code)
+                        
+                        item = ContextItem(
+                            entity=entity,
+                            entity_id=entity_id,
+                            source='import_definition',
+                            relevance_score=0.95,  # Very high priority, just below current file
+                            code_to_show=code,
+                            token_estimate=tokens
+                        )
+                        context_items.append(item)
+                        logger.debug(f"Added import definition: {getattr(entity, 'name', 'unknown')}")
+            except Exception as e:
+                logger.warning(f"Import resolution failed: {e}")
+        
+        # 3. Retrieve seeds from hybrid retriever
         seeds = self.retriever.search(query, k=self.seed_count)
         
         for seed_entity, seed_score in seeds:
@@ -301,7 +340,7 @@ class ContextAssembler:
             )
             context_items.append(item)
             
-            # 3. Expand neighbors
+            # 4. Expand neighbors
             if hasattr(self.graph, 'get_neighbors'):
                 neighbors = self.graph.get_neighbors(
                     entity_id,
@@ -331,11 +370,11 @@ class ContextAssembler:
                     )
                     context_items.append(item)
         
-        # 4. Sort by ASCENDING relevance (least relevant first)
+        # 5. Sort by ASCENDING relevance (least relevant first)
         # This ensures most relevant content survives left-truncation
         context_items.sort(key=lambda x: x.relevance_score)
         
-        # 5. Apply token budget
+        # 6. Apply token budget
         return self._apply_token_budget(context_items)
     
     def _create_abstract(self, entity: Any) -> str:
