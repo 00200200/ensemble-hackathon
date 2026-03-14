@@ -1,3 +1,8 @@
 data/
+# Local secrets
+.env
+# Optional shared template
+.env.*
+!.env.example
 # *.md
 !README.md

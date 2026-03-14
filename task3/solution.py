@@ -823,25 +823,6 @@ def main():
         f"min={pred_vals.min():.4f}, max={pred_vals.max():.4f}"
     )
 
-    # 8. Optional: submit via API
-    api_token = os.getenv("TEAM_TOKEN")
-    server_url = os.getenv("SERVER_URL")
-    if api_token and server_url:
-        print("Submitting to API …")
-        resp = requests.post(
-            f"{server_url}/task3",
-            files={"csv_file": open(SUBMISSION_FILE, "rb")},
-            headers={"X-API-Token": api_token},
-            timeout=120,
-        )
-        try:
-            data = resp.json()
-        except Exception:
-            data = resp.text
-        print(f"API response: {resp.status_code} {data}")
-    else:
-        print("No TEAM_TOKEN/SERVER_URL in .env — skipping API submission")
-
 
 if __name__ == "__main__":
     main()
