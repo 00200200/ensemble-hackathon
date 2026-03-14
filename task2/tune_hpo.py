@@ -91,13 +91,13 @@ def main() -> None:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("Task 2 dataset EnsembleAI 2026/python-public.jsonl"),
+        default=Path("python-practice-20260314T202146Z-3-001/python-public.jsonl"),
         help="Path to the source dataset JSONL.",
     )
     parser.add_argument(
         "--answers",
         type=Path,
-        default=Path("Task 2 dataset EnsembleAI 2026/answers-python-public.jsonl"),
+        default=Path("python-practice-20260314T202146Z-3-001/answers-python-public.jsonl"),
         help="Path to the ground-truth answers JSONL.",
     )
     parser.add_argument(

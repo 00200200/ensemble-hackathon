@@ -326,6 +326,14 @@ def run_pipeline(
     top_k: int = 5,
     alpha: float = 0.0,
 ) -> None:
+    if not input_path.exists():
+        raise SystemExit(
+            f"Input file not found: {input_path}\n"
+            "Create the source JSONL in the dataset folder or pass --input /path/to/source.jsonl\n"
+            "Example: uv run main.py --input 'Task 2 dataset EnsembleAI 2026/python-test.jsonl' "
+            "--archives-root 'python-practice-20260314T202146Z-3-001/python-practice' --output context_file.jsonl"
+        )
+
     retriever = Retriever()
 
     # In‑memory cache within a single run:
@@ -452,7 +460,7 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path("Task 2 dataset EnsembleAI 2026/python-public.jsonl"),
+        default=Path("python-practice-20260314T202146Z-3-001/python-public.jsonl"),
         help="Path to input dataset JSONL.",
     )
     parser.add_argument(
