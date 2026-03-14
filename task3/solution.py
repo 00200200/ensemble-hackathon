@@ -54,9 +54,16 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
 
     print("Scanning data.csv (lazy, 10 GB) …")
     needed_cols = [
-        "deviceId", "timedate", "period",
-        "t1", "t2", "t7",
-        "x1", "x2", "x3", "deviceType",
+        "deviceId",
+        "timedate",
+        "period",
+        "t1",
+        "t2",
+        "t7",
+        "x1",
+        "x2",
+        "x3",
+        "deviceType",
     ]
 
     lazy = pl.scan_csv(DATA_DIR / "data.csv", try_parse_dates=False)
@@ -99,9 +106,9 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame]:
     df = df.with_columns(pl.col("x2_changed").cum_sum().over("deviceId").alias("streak_id"))
     streak_lengths = df.group_by(["deviceId", "streak_id"]).agg(pl.len().alias("streak_len"))
     df = df.join(streak_lengths, on=["deviceId", "streak_id"], how="left")
-    df = df.filter(
-        (pl.col("streak_len") <= 24) | (pl.col("period") != "train")
-    ).drop(["x2_changed", "streak_id", "streak_len"])
+    df = df.filter((pl.col("streak_len") <= 24) | (pl.col("period") != "train")).drop(
+        ["x2_changed", "streak_id", "streak_len"]
+    )
 
     print(f"After cleaning: {len(df):,} rows")
     return df, devices
@@ -120,15 +127,16 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
 
     print("Fetching weather from Open-Meteo …")
     locations = (
-        devices
-        .with_columns([pl.col("latitude").round(1), pl.col("longitude").round(1)])
+        devices.with_columns([pl.col("latitude").round(1), pl.col("longitude").round(1)])
         .select(["latitude", "longitude"])
         .unique()
         .sort(["latitude", "longitude"])
     )
     all_locs = locations.to_dicts()
     n_total = len(all_locs)
-    print(f"  {n_total} unique locations → {math.ceil(n_total / BATCH_SIZE)} batches of {BATCH_SIZE}")
+    print(
+        f"  {n_total} unique locations → {math.ceil(n_total / BATCH_SIZE)} batches of {BATCH_SIZE}"
+    )
 
     already_done: set[tuple] = set()
     partial_frames: list[pl.DataFrame] = []
@@ -140,7 +148,7 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
         print(f"  Resuming: {len(already_done)} locations already cached")
 
     remaining = [loc for loc in all_locs if (loc["latitude"], loc["longitude"]) not in already_done]
-    batches = [remaining[i: i + BATCH_SIZE] for i in range(0, len(remaining), BATCH_SIZE)]
+    batches = [remaining[i : i + BATCH_SIZE] for i in range(0, len(remaining), BATCH_SIZE)]
 
     for batch_i, batch in enumerate(batches):
         lats = [loc["latitude"] for loc in batch]
@@ -166,12 +174,12 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
                 )
             except requests.RequestException as e:
                 print(f"    Request error: {e}, retry {attempt + 1}/10 …")
-                time.sleep(min(10 * (2 ** attempt), 120))
+                time.sleep(min(10 * (2**attempt), 120))
                 continue
 
             if resp.status_code == 200:
                 break
-            wait = min(10 * (2 ** attempt), 120)
+            wait = min(10 * (2**attempt), 120)
             print(f"    HTTP {resp.status_code}, waiting {wait}s, retry {attempt + 1}/10 …")
             time.sleep(wait)
 
@@ -191,10 +199,17 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
             humid = hourly.get("relative_humidity_2m", [None] * len(times))
             wind = hourly.get("wind_speed_10m", [None] * len(times))
             for t, te, so, hu, wi in zip(times, temps, solar, humid, wind):
-                records.append({
-                    "latitude": lat, "longitude": lon, "hour": t,
-                    "temp_2m": te, "solar_rad": so, "humidity": hu, "wind_speed": wi,
-                })
+                records.append(
+                    {
+                        "latitude": lat,
+                        "longitude": lon,
+                        "hour": t,
+                        "temp_2m": te,
+                        "solar_rad": so,
+                        "humidity": hu,
+                        "wind_speed": wi,
+                    }
+                )
 
         batch_df = pl.DataFrame(records).with_columns(
             pl.col("hour").str.to_datetime("%Y-%m-%dT%H:%M", strict=False)
@@ -219,10 +234,12 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame | None:
 
 def join_weather(df: pl.DataFrame, devices: pl.DataFrame, weather: pl.DataFrame) -> pl.DataFrame:
     """Join weather to device telemetry by nearest lat/lon and hour."""
-    devices_rounded = devices.with_columns([
-        pl.col("latitude").round(1),
-        pl.col("longitude").round(1),
-    ])
+    devices_rounded = devices.with_columns(
+        [
+            pl.col("latitude").round(1),
+            pl.col("longitude").round(1),
+        ]
+    )
     df = df.join(devices_rounded, on="deviceId", how="left")
     df = df.with_columns(pl.col("timedate").dt.truncate("1h").alias("hour"))
     df = df.join(weather, on=["latitude", "longitude", "hour"], how="left")
@@ -255,62 +272,66 @@ def add_physics_features(df: pl.DataFrame, has_weather: bool) -> pl.DataFrame:
         # t1 is min-max normalized outdoor temp, Polish range ~-15°C to +35°C → 50°C span
         # t1=0 ≈ -15°C, t1=1 ≈ +35°C → temp ≈ t1 * 50 - 15
         temp_col = pl.col("t1") * 50.0 - 15.0
-        df = df.with_columns([
-            (pl.col("t1") * 50.0 - 15.0).alias("temp_2m"),
-            pl.lit(None).cast(pl.Float64).alias("solar_rad"),
-            pl.lit(None).cast(pl.Float64).alias("humidity"),
-            pl.lit(None).cast(pl.Float64).alias("wind_speed"),
-        ])
+        df = df.with_columns(
+            [
+                (pl.col("t1") * 50.0 - 15.0).alias("temp_2m"),
+                pl.lit(None).cast(pl.Float64).alias("solar_rad"),
+                pl.lit(None).cast(pl.Float64).alias("humidity"),
+                pl.lit(None).cast(pl.Float64).alias("wind_speed"),
+            ]
+        )
 
-    df = df.with_columns([
-        (pl.lit(T_base15) - temp_col).clip(lower_bound=0).alias("hdd15_5min"),
-        (pl.lit(T_base18) - temp_col).clip(lower_bound=0).alias("hdd18_5min"),
-        (temp_col - pl.lit(T_cool22)).clip(lower_bound=0).alias("cdd22_5min"),
-        ((pl.lit(T_indoor) - temp_col) / pl.lit(T_indoor)).clip(lower_bound=0).alias("inv_cop"),
-        pl.col("timedate").dt.date().alias("date"),
-        pl.col("timedate").dt.year().alias("year"),
-        pl.col("timedate").dt.month().alias("month"),
-        pl.col("timedate").dt.ordinal_day().alias("doy"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.lit(T_base15) - temp_col).clip(lower_bound=0).alias("hdd15_5min"),
+            (pl.lit(T_base18) - temp_col).clip(lower_bound=0).alias("hdd18_5min"),
+            (temp_col - pl.lit(T_cool22)).clip(lower_bound=0).alias("cdd22_5min"),
+            ((pl.lit(T_indoor) - temp_col) / pl.lit(T_indoor)).clip(lower_bound=0).alias("inv_cop"),
+            pl.col("timedate").dt.date().alias("date"),
+            pl.col("timedate").dt.year().alias("year"),
+            pl.col("timedate").dt.month().alias("month"),
+            pl.col("timedate").dt.ordinal_day().alias("doy"),
+        ]
+    )
     return df
 
 
 def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
     """Compress 5-minute rows to one row per (deviceId, date) for ALL periods."""
-    df = df.with_columns(
-        (pl.col("hdd15_5min") * pl.col("inv_cop")).alias("load_proxy_5min")
-    )
+    df = df.with_columns((pl.col("hdd15_5min") * pl.col("inv_cop")).alias("load_proxy_5min"))
 
     if "latitude" not in df.columns:
         df = df.join(devices.select(["deviceId", "latitude"]), on="deviceId", how="left")
 
-    daily = df.group_by(["deviceId", "date"]).agg([
-        pl.col("x2").mean().alias("x2_mean"),
-        pl.col("period").first().alias("period"),
-        pl.col("year").first().alias("year"),
-        pl.col("month").first().alias("month"),
-        pl.col("doy").first().alias("doy"),
-        pl.col("latitude").first().alias("latitude"),
-        pl.col("t1").mean().alias("t1_mean"),
-        pl.col("t1").max().alias("t1_max"),
-        pl.col("t1").min().alias("t1_min"),
-        pl.col("t2").mean().alias("t2_mean"),
-        pl.col("t7").mean().alias("t7_mean"),
-        pl.col("x1").mean().alias("x1_mean"),
-        pl.col("x3").first().alias("x3"),
-        pl.col("deviceType").first().alias("deviceType"),
-        pl.col("temp_2m").mean().alias("temp_mean"),
-        pl.col("temp_2m").max().alias("temp_max"),
-        pl.col("temp_2m").min().alias("temp_min"),
-        pl.col("solar_rad").sum().alias("solar_sum"),
-        pl.col("humidity").mean().alias("humidity_mean"),
-        pl.col("wind_speed").mean().alias("wind_mean"),
-        (pl.col("hdd15_5min").sum() / 288).alias("HDD_15"),
-        (pl.col("hdd18_5min").sum() / 288).alias("HDD_18"),
-        (pl.col("cdd22_5min").sum() / 288).alias("CDD_22"),
-        pl.col("inv_cop").mean().alias("inv_cop"),
-        (pl.col("load_proxy_5min").sum() / 288).alias("load_proxy"),
-    ])
+    daily = df.group_by(["deviceId", "date"]).agg(
+        [
+            pl.col("x2").mean().alias("x2_mean"),
+            pl.col("period").first().alias("period"),
+            pl.col("year").first().alias("year"),
+            pl.col("month").first().alias("month"),
+            pl.col("doy").first().alias("doy"),
+            pl.col("latitude").first().alias("latitude"),
+            pl.col("t1").mean().alias("t1_mean"),
+            pl.col("t1").max().alias("t1_max"),
+            pl.col("t1").min().alias("t1_min"),
+            pl.col("t2").mean().alias("t2_mean"),
+            pl.col("t7").mean().alias("t7_mean"),
+            pl.col("x1").mean().alias("x1_mean"),
+            pl.col("x3").first().alias("x3"),
+            pl.col("deviceType").first().alias("deviceType"),
+            pl.col("temp_2m").mean().alias("temp_mean"),
+            pl.col("temp_2m").max().alias("temp_max"),
+            pl.col("temp_2m").min().alias("temp_min"),
+            pl.col("solar_rad").sum().alias("solar_sum"),
+            pl.col("humidity").mean().alias("humidity_mean"),
+            pl.col("wind_speed").mean().alias("wind_mean"),
+            (pl.col("hdd15_5min").sum() / 288).alias("HDD_15"),
+            (pl.col("hdd18_5min").sum() / 288).alias("HDD_18"),
+            (pl.col("cdd22_5min").sum() / 288).alias("CDD_22"),
+            pl.col("inv_cop").mean().alias("inv_cop"),
+            (pl.col("load_proxy_5min").sum() / 288).alias("load_proxy"),
+        ]
+    )
 
     daily = daily.with_columns(
         pl.struct(["latitude", "doy"])
@@ -322,9 +343,7 @@ def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
     )
 
     daily = daily.sort(["deviceId", "date"])
-    daily = daily.with_columns(
-        (pl.col("temp_mean") < 15.0).cast(pl.Int32).alias("cold_day")
-    )
+    daily = daily.with_columns((pl.col("temp_mean") < 15.0).cast(pl.Int32).alias("cold_day"))
     daily = daily.with_columns(
         (
             pl.col("cold_day")
@@ -354,9 +373,8 @@ def daily_aggregate(df: pl.DataFrame, devices: pl.DataFrame) -> pl.DataFrame:
 
 def build_monthly_features(daily: pl.DataFrame) -> pl.DataFrame:
     """Aggregate daily → monthly per device. ALL periods included."""
-    monthly = (
-        daily.group_by(["deviceId", "year", "month"])
-        .agg([
+    monthly = daily.group_by(["deviceId", "year", "month"]).agg(
+        [
             pl.col("x2_mean").mean().alias("x2_monthly"),
             pl.col("period").first().alias("period"),
             pl.col("temp_mean").mean().alias("temp_mean_monthly"),
@@ -375,7 +393,7 @@ def build_monthly_features(daily: pl.DataFrame) -> pl.DataFrame:
             pl.col("deviceType").first().alias("deviceType"),
             pl.col("is_heating_season").mean().alias("frac_heating_season"),
             pl.col("sample_weight").mean().alias("sample_weight"),
-        ])
+        ]
     )
     return monthly.sort(["deviceId", "year", "month"])
 
@@ -409,7 +427,9 @@ def fit_physics_model(monthly: pl.DataFrame) -> pl.DataFrame:
 
         # April mean (best proxy for early summer)
         apr_mask = months == 4
-        apr_mean = float(np.mean(x2[apr_mask & mask])) if (apr_mask & mask).any() else x2_train_mean * 0.4
+        apr_mean = (
+            float(np.mean(x2[apr_mask & mask])) if (apr_mask & mask).any() else x2_train_mean * 0.4
+        )
 
         # October 2024 mean (anchor for October 2025)
         oct_mask = months == 10
@@ -428,14 +448,16 @@ def fit_physics_model(monthly: pl.DataFrame) -> pl.DataFrame:
             htc = 0.0
             dhw_baseload = max(x2_train_mean * 0.3, global_dhw)
 
-        results.append({
-            "deviceId": device_id,
-            "htc": htc,
-            "dhw_baseload": dhw_baseload,
-            "x2_train_mean": x2_train_mean,
-            "apr_mean": apr_mean,
-            "oct24_mean": oct24_mean,
-        })
+        results.append(
+            {
+                "deviceId": device_id,
+                "htc": htc,
+                "dhw_baseload": dhw_baseload,
+                "x2_train_mean": x2_train_mean,
+                "apr_mean": apr_mean,
+                "oct24_mean": oct24_mean,
+            }
+        )
 
     return pl.DataFrame(results)
 
@@ -448,10 +470,14 @@ def predict_physics(monthly_pred: pl.DataFrame, physics_params: pl.DataFrame) ->
     """
     pred = monthly_pred.join(physics_params, on="deviceId", how="left")
 
-    pred = pred.with_columns([
-        (pl.col("htc").fill_null(0.0) * pl.col("HDD_15_monthly").fill_null(0.0)
-         + pl.col("dhw_baseload").fill_null(0.02)).alias("phys_raw"),
-    ])
+    pred = pred.with_columns(
+        [
+            (
+                pl.col("htc").fill_null(0.0) * pl.col("HDD_15_monthly").fill_null(0.0)
+                + pl.col("dhw_baseload").fill_null(0.02)
+            ).alias("phys_raw"),
+        ]
+    )
 
     # Oct 2025 anchor: blend 50/50 with Oct 2024 actual
     pred = pred.with_columns(
@@ -471,7 +497,9 @@ def predict_physics(monthly_pred: pl.DataFrame, physics_params: pl.DataFrame) ->
     # Summer cap: Jun-Aug must be <= April level (no heating, DHW only)
     pred = pred.with_columns(
         pl.when(pl.col("month").is_in([6, 7, 8]))
-        .then(pl.col("phys_pred").clip(upper_bound=pl.col("apr_mean").fill_null(pl.col("phys_pred"))))
+        .then(
+            pl.col("phys_pred").clip(upper_bound=pl.col("apr_mean").fill_null(pl.col("phys_pred")))
+        )
         .otherwise(pl.col("phys_pred"))
         .alias("phys_pred")
     )
@@ -485,12 +513,22 @@ def predict_physics(monthly_pred: pl.DataFrame, physics_params: pl.DataFrame) ->
 
 
 MONTHLY_FEATURE_COLS = [
-    "month", "temp_mean_monthly", "temp_min_monthly",
-    "HDD_15_monthly", "HDD_18_monthly", "CDD_22_monthly",
-    "load_proxy_monthly", "solar_monthly", "day_length_monthly",
-    "inv_cop_monthly", "t1_mean_monthly", "t1_min_monthly",
-    "x1_mean_monthly", "frac_heating_season",
-    "x3", "deviceType",
+    "month",
+    "temp_mean_monthly",
+    "temp_min_monthly",
+    "HDD_15_monthly",
+    "HDD_18_monthly",
+    "CDD_22_monthly",
+    "load_proxy_monthly",
+    "solar_monthly",
+    "day_length_monthly",
+    "inv_cop_monthly",
+    "t1_mean_monthly",
+    "t1_min_monthly",
+    "x1_mean_monthly",
+    "frac_heating_season",
+    "x3",
+    "deviceType",
 ]
 
 _MONOTONE = [0] * len(MONTHLY_FEATURE_COLS)
@@ -545,8 +583,9 @@ def train_monthly_lgb(monthly: pl.DataFrame) -> list[lgb.Booster]:
 
     models = []
     for fold_i, (ti, vi) in enumerate(folds):
-        dtrain = lgb.Dataset(X[ti], label=y[ti], weight=w[ti],
-                             feature_name=MONTHLY_FEATURE_COLS, free_raw_data=False)
+        dtrain = lgb.Dataset(
+            X[ti], label=y[ti], weight=w[ti], feature_name=MONTHLY_FEATURE_COLS, free_raw_data=False
+        )
         dval = lgb.Dataset(X[vi], label=y[vi], reference=dtrain)
         model = lgb.train(
             LGB_PARAMS,
@@ -599,14 +638,13 @@ def build_submission(
     # ── Combine: 70% physics + 30% LGB ──────────────────────────────────────
     combined = pred_a_df.join(pred_b_df, on=["deviceId", "year", "month"], how="left")
     combined = combined.with_columns(
-        (pl.col("phys_pred") * 0.7 + pl.col("lgb_pred").fill_null(pl.col("phys_pred")) * 0.3)
-        .alias("prediction")
+        (pl.col("phys_pred") * 0.7 + pl.col("lgb_pred").fill_null(pl.col("phys_pred")) * 0.3).alias(
+            "prediction"
+        )
     )
 
     # ── Final clip to [0, 1] ─────────────────────────────────────────────────
-    combined = combined.with_columns(
-        pl.col("prediction").clip(lower_bound=0.0, upper_bound=1.0)
-    )
+    combined = combined.with_columns(pl.col("prediction").clip(lower_bound=0.0, upper_bound=1.0))
 
     return combined.select(["deviceId", "year", "month", "prediction"]).sort(
         ["deviceId", "year", "month"]
@@ -633,7 +671,9 @@ def main():
         df = join_weather(df, devices, weather)
     else:
         print("No weather data — using t1-based physics fallback")
-        df = df.join(devices.select(["deviceId", "latitude", "longitude"]), on="deviceId", how="left")
+        df = df.join(
+            devices.select(["deviceId", "latitude", "longitude"]), on="deviceId", how="left"
+        )
 
     # 3. Feature engineering (ALL periods — validation/test t1 used for HDD)
     print("Computing physics features …")
