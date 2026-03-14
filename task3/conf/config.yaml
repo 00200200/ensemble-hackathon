@@ -1,0 +1,34 @@
+defaults:
+  - _self_
+
+ensemble:
+  weights:
+    physics: 0.5000
+    lgbm: 0.2500
+    chronos: 0.2500
+  fallback_weights:
+    physics: 0.67
+    lgbm: 0.33
+
+chronos:
+  enabled: true
+
+optuna:
+  n_trials: 80
+  seed: 42
+  reg_lambda: 0.02
+  prior_weights:
+    physics: 0.50
+    lgbm: 0.30
+    chronos: 0.20
+  min_weights:
+    physics: 0.20
+    lgbm: 0.10
+    chronos: 0.10
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

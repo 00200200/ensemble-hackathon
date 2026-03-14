@@ -8,6 +8,7 @@ MONTHLY_FEATURE_COLS = [
     "HDD_18_monthly", "CDD_22_monthly", "load_proxy_monthly", "solar_monthly", 
     "day_length_monthly", "inv_cop_monthly", "t1_mean_monthly", "t1_min_monthly", 
     "x1_mean_monthly", "frac_heating_season", "x3", "deviceType",
+    "temp_weighted_x3", "temp_solar_interaction", "lag_temp_1_month",
 ]
 
 _MONOTONE = [0] * len(MONTHLY_FEATURE_COLS)
@@ -17,9 +18,9 @@ _MONOTONE[MONTHLY_FEATURE_COLS.index("load_proxy_monthly")] = 1
 
 LGB_PARAMS = {
     "objective": "huber",
-    "huber_delta": 0.5,
+    "huber_delta": 0.1,    # Bardzo mała delta zmusza Hubera do zachowywania się jak MAE (L1)
     "linear_tree": True,
-    "monotone_constraints": _MONOTONE,
+    "monotone_constraints": _MONOTONE,  # Teraz przejdzie bez problemu!
     "metric": "mae",
     "num_leaves": 15,
     "learning_rate": 0.03,
@@ -49,19 +50,26 @@ def get_cv_folds(monthly_train: pl.DataFrame) -> list[tuple[np.ndarray, np.ndarr
     return result
 
 def train_monthly_lgb(monthly: pl.DataFrame) -> list[lgb.Booster]:
-    """Train LightGBM on monthly data."""
+    """Train LightGBM on monthly data using log1p transformation."""
     train_monthly = monthly.filter(pl.col("period") == "train").fill_null(0)
     X = train_monthly.select(MONTHLY_FEATURE_COLS).to_numpy().astype(np.float32)
-    y = train_monthly["x2_monthly"].to_numpy().astype(np.float64)
+    
+    # Wyciągamy oryginalne Y (do ewaluacji prawdziwego MAE)
+    y_original = train_monthly["x2_monthly"].to_numpy().astype(np.float64)
+    # Tworzymy zlogarytmowane Y (do treningu modelu)
+    y_log = np.log1p(y_original)
+    
     w = train_monthly["sample_weight"].to_numpy().astype(np.float64)
 
     folds = get_cv_folds(train_monthly)
-    print(f"  Monthly CV folds: {len(folds)}, train rows: {len(y)}")
+    print(f"  Monthly CV folds: {len(folds)}, train rows: {len(y_original)}")
 
     models = []
     for fold_i, (ti, vi) in enumerate(folds):
-        dtrain = lgb.Dataset(X[ti], label=y[ti], weight=w[ti], feature_name=MONTHLY_FEATURE_COLS, free_raw_data=False)
-        dval = lgb.Dataset(X[vi], label=y[vi], reference=dtrain)
+        # Model uczy się na y_log
+        dtrain = lgb.Dataset(X[ti], label=y_log[ti], weight=w[ti], feature_name=MONTHLY_FEATURE_COLS, free_raw_data=False)
+        dval = lgb.Dataset(X[vi], label=y_log[vi], reference=dtrain)
+        
         model = lgb.train(
             LGB_PARAMS,
             dtrain,
@@ -69,7 +77,12 @@ def train_monthly_lgb(monthly: pl.DataFrame) -> list[lgb.Booster]:
             valid_sets=[dval],
             callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(0)],
         )
-        val_mae = float(np.mean(np.abs(model.predict(X[vi]) - y[vi])))
+        
+        # Wyliczamy prawdziwe MAE na oryginalnej skali
+        raw_preds = model.predict(X[vi])
+        real_preds = np.expm1(raw_preds)  # Odwracamy logarytm
+        
+        val_mae = float(np.mean(np.abs(real_preds - y_original[vi])))
         print(f"  Monthly LGB Fold {fold_i + 1} MAE={val_mae:.4f}")
         models.append(model)
 

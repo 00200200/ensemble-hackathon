@@ -140,4 +140,21 @@ def build_monthly_features(daily: pl.DataFrame) -> pl.DataFrame:
             pl.col("sample_weight").mean().alias("sample_weight"),
         ]
     )
-    return monthly.sort(["deviceId", "year", "month"])
+
+    # Uporządkowanie czasowe jest wymagane dla lagów miesięcznych
+    monthly = monthly.sort(["deviceId", "year", "month"])
+
+    # Master features z analizy XAI
+    monthly = monthly.with_columns(
+        [
+            (pl.col("temp_mean_monthly") * pl.col("x3")).alias("temp_weighted_x3"),
+            (pl.col("temp_mean_monthly") * pl.col("solar_monthly")).alias("temp_solar_interaction"),
+            pl.col("temp_mean_monthly").shift(1).over("deviceId").alias("lag_temp_1_month"),
+        ]
+    ).with_columns(
+        [
+            pl.col("lag_temp_1_month").fill_null(pl.col("temp_mean_monthly")).alias("lag_temp_1_month"),
+        ]
+    )
+
+    return monthly
