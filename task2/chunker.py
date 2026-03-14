@@ -34,6 +34,57 @@ IMPORT_QUERY = """
 (import_from_statement) @importfrom.stmt
 """
 
+
+def build_ts_query(language, query_str):
+    """Fallback compiler for tree-sitter queries across v0.20 to v0.25+."""
+    try:
+        from tree_sitter import Query  # type: ignore
+
+        return Query(language, query_str)
+    except ImportError:
+        # Older API: language.query
+        return language.query(query_str)
+
+
+def get_ts_captures(query_obj, node) -> List[Tuple[Node, str]]:
+    """Version-agnostic wrapper to execute a query and return ordered [(Node, capture_name)]."""
+    results: List[Tuple[Node, str]] = []
+    try:
+        from tree_sitter import QueryCursor  # type: ignore
+
+        cursor = QueryCursor(query_obj)
+        matches = cursor.matches(node)
+        for match in matches:
+            # Handle varying tuple/dict formats across versions
+            capture_dict = match[1] if isinstance(match, tuple) else match
+            for name, nodes in capture_dict.items():
+                for n in nodes:
+                    results.append((n, name))
+
+        # Deduplicate and sort by appearance in file
+        unique: List[Tuple[Node, str]] = []
+        seen: Set[Tuple[int, str]] = set()
+        for n, name in results:
+            key = (id(n), name)
+            if key not in seen:
+                seen.add(key)
+                unique.append((n, name))
+        unique.sort(key=lambda x: x[0].start_byte)
+        return unique
+    except ImportError:
+        # Fallback for tree-sitter < 0.22
+        if hasattr(query_obj, "captures"):
+            caps = query_obj.captures(node)
+            if isinstance(caps, list):
+                return caps
+            if isinstance(caps, dict):
+                for name, nodes in caps.items():
+                    for n in nodes:
+                        results.append((n, name))
+                results.sort(key=lambda x: x[0].start_byte)
+                return results
+    return []
+
 def extract_repo(zip_path: str, extract_to: str):
     """Extracts a repository zip file to a specified directory."""
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -59,8 +110,8 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
     source_text = source_bytes.decode("utf-8", errors="ignore")
 
     # Core definitions: functions and classes (independent of inheritance)
-    core_query = PY_LANGUAGE.query(CORE_QUERY)
-    core_captures = core_query.captures(tree.root_node)
+    core_query = build_ts_query(PY_LANGUAGE, CORE_QUERY)
+    core_captures = get_ts_captures(core_query, tree.root_node)
 
     # Reconstruct blocks based on captures. `captures` is a list of tuples:
     # (Node, capture_name). The list is ordered by occurrence. A `function.def`
@@ -108,21 +159,7 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
         })
         return chunks
 
-    # ------------------------------------------------------------------
-    # 1. AST-based call graph: identify real call sites inside each chunk
-    # ------------------------------------------------------------------
-    #
-    # We collect identifiers that appear in call position, either as:
-    #   func(...)  -> identifier
-    #   obj.method(...) -> attribute with an identifier `method`
-    #
-    # and then match them against locally defined names.
-    calls_per_chunk: Dict[int, Set[str]] = {id(c): set() for c in chunks}
-    defined_names = {c.get("name") for c in chunks if c.get("name")}
-
-    call_query = PY_LANGUAGE.query(CALL_QUERY)
-    call_captures = call_query.captures(tree.root_node)
-
+    # Helper for byte-span containment (used by both calls and bases)
     def find_chunk_for_node(node: Node) -> Optional[Dict[str, Any]]:
         start = node.start_byte
         end = node.end_byte
@@ -131,19 +168,20 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
                 return chunk
         return None
 
+    # ------------------------------------------------------------------
+    # 1. AST-based call graph: extract all calls (global filtering happens in main.py)
+    # ------------------------------------------------------------------
+    calls_per_chunk: Dict[int, Set[str]] = {id(c): set() for c in chunks}
+    call_query = build_ts_query(PY_LANGUAGE, CALL_QUERY)
+    call_captures = get_ts_captures(call_query, tree.root_node)
+
     for node, cap_name in call_captures:
         if cap_name != "called_func":
             continue
-        name = source_bytes[node.start_byte:node.end_byte].decode(
-            "utf-8",
-            errors="ignore",
-        )
-        if name not in defined_names:
-            continue
+        name = source_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
         owner_chunk = find_chunk_for_node(node)
-        if owner_chunk is None:
-            continue
-        calls_per_chunk[id(owner_chunk)].add(name)
+        if owner_chunk is not None:
+            calls_per_chunk[id(owner_chunk)].add(name)
 
     for chunk in chunks:
         chunk["calls"] = sorted(calls_per_chunk.get(id(chunk), set()))
@@ -151,45 +189,29 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
     # ------------------------------------------------------------------
     # 2. Base class extraction: record simple inheritance dependencies
     # ------------------------------------------------------------------
-    base_query = PY_LANGUAGE.query(BASE_QUERY)
-    base_captures = base_query.captures(tree.root_node)
-
     bases_per_chunk: Dict[int, Set[str]] = {}
-
-    def find_class_chunk(node: Node) -> Optional[Dict[str, Any]]:
-        # Walk up to the enclosing class_definition, then map via def_spans.
-        current: Optional[Node] = node
-        while current is not None and current.type != "class_definition":
-            current = current.parent
-        if current is None:
-            return None
-        for def_node, chunk in def_spans:
-            if def_node is current:
-                return chunk
-        return None
+    base_query = build_ts_query(PY_LANGUAGE, BASE_QUERY)
+    base_captures = get_ts_captures(base_query, tree.root_node)
 
     for node, cap_name in base_captures:
         if cap_name != "class.base":
             continue
-        base_name = source_bytes[node.start_byte:node.end_byte].decode(
-            "utf-8",
-            errors="ignore",
-        )
-        owner_chunk = find_class_chunk(node)
-        if owner_chunk is None:
-            continue
-        bases_per_chunk.setdefault(id(owner_chunk), set()).add(base_name)
+        base_name = source_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
+        owner_chunk = find_chunk_for_node(node)
+        if owner_chunk is not None and owner_chunk.get("type") == "class":
+            bases_per_chunk.setdefault(id(owner_chunk), set()).add(base_name)
 
     for chunk in chunks:
-        chunk["bases"] = sorted(bases_per_chunk.get(id(chunk), set()))
+        if chunk.get("type") == "class":
+            chunk["bases"] = sorted(bases_per_chunk.get(id(chunk), set()))
 
     # ------------------------------------------------------------------
     # 3. Import chunks: treat import statements as independent retrievable
     #    units, since they often carry high-signal library information.
     # ------------------------------------------------------------------
     import_chunks: List[Dict[str, Any]] = []
-    import_query = PY_LANGUAGE.query(IMPORT_QUERY)
-    import_captures = import_query.captures(tree.root_node)
+    import_query = build_ts_query(PY_LANGUAGE, IMPORT_QUERY)
+    import_captures = get_ts_captures(import_query, tree.root_node)
 
     def node_text(n: Node) -> str:
         return source_bytes[n.start_byte:n.end_byte].decode(
