@@ -224,7 +224,7 @@ def fetch_weather(devices: pl.DataFrame) -> pl.DataFrame:
         DATA_DIR.mkdir(exist_ok=True)
         combined.write_parquet(WEATHER_PARTIAL)
 
-        time.sleep(2)
+        time.sleep(5)
 
     if not partial_frames:
         raise RuntimeError("No weather data fetched — all batches failed")
@@ -422,7 +422,8 @@ MONOTONE[FEATURE_COLS.index("HDD_15")] = 1  # more heating days → higher load
 MONOTONE[FEATURE_COLS.index("HDD_18")] = 1
 
 LGB_PARAMS = {
-    "objective": "regression_l1",
+    "objective": "huber",       # supports monotone_constraints; small delta ≈ L1/MAE
+    "huber_delta": 1.0,
     "linear_tree": True,
     "monotone_constraints": MONOTONE,
     "metric": "mae",
@@ -455,13 +456,16 @@ PHYSICS_FEATURES = [
 def get_cv_folds(daily_train: pl.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
     """Temporal forward-chaining CV on training data."""
     month_col = daily_train["month"].to_numpy()
+    # Training spans Oct(10), Nov(11), Dec(12), Jan(1), Feb(2), Mar(3), Apr(4)
+    # Must include Oct-Dec in every training fold
+    is_winter = (month_col >= 10) | (month_col <= 1)  # Oct, Nov, Dec, Jan
     folds = [
         # Fold 1: Oct–Jan → Feb
-        (month_col <= 1, month_col == 2),
+        (is_winter, month_col == 2),
         # Fold 2: Oct–Feb → Mar
-        (month_col <= 3, month_col == 3),
+        (is_winter | (month_col == 2), month_col == 3),
         # Fold 3: Oct–Mar → Apr (most important: heating wind-down)
-        (month_col <= 4, month_col == 4),
+        (is_winter | (month_col == 2) | (month_col == 3), month_col == 4),
     ]
     result = []
     for train_mask, val_mask in folds:
@@ -515,7 +519,7 @@ def train_models(daily: pl.DataFrame) -> dict:
         y_val_log = np.log1p(np.maximum(y_val, 0))
         dval_log = lgb.Dataset(X_val, label=y_val_log, reference=dtrain_log)
         lgb_log_model = lgb.train(
-            {**LGB_PARAMS, "monotone_constraints": MONOTONE},
+            LGB_PARAMS,
             dtrain_log,
             num_boost_round=500,
             valid_sets=[dval_log],
