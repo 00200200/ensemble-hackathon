@@ -143,7 +143,6 @@ def expand_with_dependencies(
     all_chunks: List[Dict[str, Any]],
     token_budget: int,
     already_used_tokens: int,
-    max_extra: int = 8,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     1‑hop dependency expansion within the remaining token budget.
@@ -151,6 +150,10 @@ def expand_with_dependencies(
     - Callees: for each chunk, add functions/classes it calls (via `calls`).
     - Callers: also add functions/classes that call the selected chunk.
     - Class hierarchy: for class chunks, add base classes (via `bases`).
+
+    When the number of candidate dependencies exceeds the remaining token
+    budget, we rank candidates by a simple degree-centrality metric:
+    how many base chunks depend on them. Higher centrality is expanded first.
     """
     name_to_chunk: Dict[str, Dict[str, Any]] = {}
     for c in all_chunks:
@@ -170,48 +173,59 @@ def expand_with_dependencies(
             callers.setdefault(callee, []).append(c)
 
     selected_ids = {id(c) for c in base_chunks}
-    extras: List[Dict[str, Any]] = []
     used = already_used_tokens
 
-    def maybe_add(target: Dict[str, Any]) -> bool:
-        nonlocal used
-        if id(target) in selected_ids:
-            return False
-        text = target.get("text", "")
-        tokens = count_tokens(text)
-        if tokens <= 0:
-            return False
-        if used + tokens > token_budget:
-            return False
-        extras.append(target)
-        selected_ids.add(id(target))
-        used += tokens
-        return True
+    # Collect all 1-hop dependency candidates keyed by the chunk object.
+    centrality: Dict[int, int] = {}
+    candidate_chunks: Dict[int, Dict[str, Any]] = {}
 
-    for chunk in base_chunks:
-        # 1) Follow outgoing calls (callees).
-        for name in chunk.get("calls") or []:
+    def register_candidate(dep_chunk: Dict[str, Any], from_base: Dict[str, Any]) -> None:
+        dep_id = id(dep_chunk)
+        if dep_id in selected_ids:
+            return
+        candidate_chunks[dep_id] = dep_chunk
+        centrality[dep_id] = centrality.get(dep_id, 0) + 1
+
+    for base in base_chunks:
+        # 1) Outgoing calls (callees).
+        for name in base.get("calls") or []:
             target = name_to_chunk.get(name)
-            if not target:
-                continue
-            if maybe_add(target) and len(extras) >= max_extra:
-                return extras, used
+            if target:
+                register_candidate(target, base)
 
-        # 2) Add callers that reference this chunk by name.
-        name = chunk.get("name")
-        if name and name in callers:
-            for caller in callers[name]:
-                if maybe_add(caller) and len(extras) >= max_extra:
-                    return extras, used
+        # 2) Incoming edges (callers).
+        base_name = base.get("name")
+        if base_name and base_name in callers:
+            for caller in callers[base_name]:
+                register_candidate(caller, base)
 
-        # 3) For class chunks, add base classes.
-        if chunk.get("type") == "class":
-            for base_name in chunk.get("bases") or []:
+        # 3) Class inheritance.
+        if base.get("type") == "class":
+            for base_name in base.get("bases") or []:
                 base_chunk = name_to_chunk.get(base_name)
-                if not base_chunk:
-                    continue
-                if maybe_add(base_chunk) and len(extras) >= max_extra:
-                    return extras, used
+                if base_chunk:
+                    register_candidate(base_chunk, base)
+
+    # Rank candidates by centrality (desc), then by shorter length (asc).
+    ranked_ids = sorted(
+        candidate_chunks.keys(),
+        key=lambda cid: (
+            -centrality.get(cid, 0),
+            count_tokens(candidate_chunks[cid].get("text", "")),
+        ),
+    )
+
+    extras: List[Dict[str, Any]] = []
+    for cid in ranked_ids:
+        chunk = candidate_chunks[cid]
+        tokens = count_tokens(chunk.get("text", ""))
+        if tokens <= 0:
+            continue
+        if used + tokens > token_budget:
+            continue
+        extras.append(chunk)
+        selected_ids.add(cid)
+        used += tokens
 
     return extras, used
 
@@ -238,6 +252,69 @@ def resolve_archive_path(archives_root: Path, archive_name: str) -> Path:
     the expected path to the zip file.
     """
     return archives_root / archive_name
+
+
+def build_dependency_order(
+    all_selected: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Given the final set of selected chunks S (initial retrieval + expansion),
+    construct a dependency DAG and return a topologically sorted list of
+    chunks. If u depends on v (via calls or bases), v will appear before u
+    in the returned order.
+
+    Cycles are broken conservatively using a DFS stack check: edges that
+    would create a cycle are ignored.
+    """
+    if not all_selected:
+        return []
+
+    idx_by_id: Dict[int, int] = {id(c): i for i, c in enumerate(all_selected)}
+
+    # Map names to indices within S for quick dependency lookups.
+    name_to_indices: Dict[str, List[int]] = {}
+    for i, c in enumerate(all_selected):
+        name = c.get("name")
+        if not name:
+            continue
+        name_to_indices.setdefault(name, []).append(i)
+
+    # Build adjacency list: u -> {v indices} meaning "u depends on v".
+    graph: List[Set[int]] = [set() for _ in all_selected]
+    for u_idx, chunk in enumerate(all_selected):
+        deps: List[str] = []
+        deps.extend(chunk.get("calls") or [])
+        deps.extend(chunk.get("bases") or [])
+
+        for dep_name in deps:
+            for v_idx in name_to_indices.get(dep_name, []):
+                if v_idx == u_idx:
+                    continue
+                graph[u_idx].add(v_idx)
+
+    order: List[int] = []
+    state: List[int] = [0] * len(all_selected)  # 0=unvisited, 1=visiting, 2=done
+
+    def dfs(u: int) -> None:
+        if state[u] == 2:
+            return
+        if state[u] == 1:
+            # Detected a cycle; we break it by ignoring this back-edge.
+            return
+        state[u] = 1
+        for v in graph[u]:
+            dfs(v)
+        state[u] = 2
+        order.append(u)
+
+    # Start DFS from all nodes; those with more outgoing edges (more deps)
+    # will naturally appear later, but all dependencies are visited first.
+    for i in range(len(all_selected)):
+        if state[i] == 0:
+            dfs(i)
+
+    # `order` is in a valid topological order: dependencies before dependents.
+    return [all_selected[i] for i in order]
 
 
 def run_pipeline(
@@ -346,9 +423,12 @@ def run_pipeline(
 
             all_selected = selected + extras
 
-            # Reverse order so least relevant appear first, most relevant last,
-            # ensuring the best material survives left‑truncation.
-            chunks_for_context = list(reversed(all_selected))
+            # Topologically sort S so that dependencies (callees/base classes)
+            # always appear before the chunks that use them. Since the
+            # evaluation truncates from the left, important retrieved targets
+            # still tend to end up near the right, but their prerequisites are
+            # never placed after them.
+            chunks_for_context = build_dependency_order(all_selected)
             context = format_context(chunks_for_context, FILE_SEP_TOKEN)
 
             json.dump({"id": qid, "context": context}, fout)
