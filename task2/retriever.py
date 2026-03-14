@@ -1,22 +1,50 @@
+import os
+from typing import Any, Dict, List, Optional, Tuple
+
 import lancedb
-from sentence_transformers import SentenceTransformer
 import pyarrow as pa
-from typing import List, Dict, Any
 from rank_bm25 import BM25Okapi
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 
 class Retriever:
     """
     Handles creating a LanceDB index for a repository's chunks and performing
     dense vector similarity search combined with sparse BM25 search.
+
+    Optionally, a cross-encoder can be used to re-rank top candidates.
     """
-    def __init__(self, db_path: str = "/tmp/lancedb", model_name: str = "all-MiniLM-L6-v2"):
+
+    def __init__(
+        self,
+        db_path: str = "/tmp/lancedb",
+        model_name: Optional[str] = None,
+        cross_encoder_model: Optional[str] = None,
+    ):
         self.db = lancedb.connect(db_path)
-        self.model = SentenceTransformer(model_name)
+        # Allow overriding the embedding model via env, but keep the original
+        # baseline as default to preserve performance unless explicitly changed.
+        effective_model = (
+            model_name
+            or os.getenv("TASK2_EMBEDDING_MODEL")
+            or "all-MiniLM-L6-v2"
+        )
+        self.model = SentenceTransformer(effective_model)
+
         # Store bm25 index inside the retriever
         self.bm25_indices: Dict[str, BM25Okapi] = {}
         # Keep chunks in memory for bm25 scoring
         self.repo_chunks: Dict[str, List[Dict[str, Any]]] = {}
+
+        # Optional cross-encoder for higher-precision re-ranking.
+        ce_name = cross_encoder_model or os.getenv("TASK2_CROSS_ENCODER_MODEL")
+        self.cross_encoder: Optional[CrossEncoder] = None
+        if ce_name:
+            try:
+                self.cross_encoder = CrossEncoder(ce_name)
+            except Exception:
+                # If the model can't be loaded, silently fall back to hybrid-only.
+                self.cross_encoder = None
     
     def embed(self, texts: List[str]) -> List[List[float]]:
         # Using simple sentence embeddings
@@ -79,12 +107,27 @@ class Retriever:
         self.bm25_indices[table_name] = BM25Okapi(tokenized_corpus)
         self.repo_chunks[table_name] = chunks
         
-    def search(self, table_name: str, query: str, top_k: int = 5, alpha: float = 0.5) -> List[Dict[str, Any]]:
+    def search(
+        self,
+        table_name: str,
+        query: str,
+        top_k: int = 5,
+        alpha: float = 0.5,
+        re_rank: bool = True,
+        re_rank_top_k: int = 30,
+    ) -> List[Dict[str, Any]]:
         """
         Searches the table for the top_k most similar chunks to the query.
-        Uses Hybrid Search (Dense + BM25) with alpha weighting:
-        Score = alpha * DenseScore + (1 - alpha) * SparseScore
-        Both scores are normalized before combination (min-max).
+
+        Primary ranking:
+            Hybrid Search (Dense + BM25) with alpha weighting:
+                Score = alpha * DenseScore + (1 - alpha) * SparseScore
+            Both scores are normalized before combination (min-max).
+
+        Optional re-ranking:
+            If a cross-encoder is available and `re_rank` is True, the top
+            `re_rank_top_k` hybrid candidates are re-scored using the
+            cross-encoder and then truncated to `top_k`.
         """
         if table_name not in self.db.table_names() or table_name not in self.bm25_indices:
             return []
@@ -134,7 +177,7 @@ class Retriever:
         # ----------------
         # C. Fusion
         # ----------------
-        hybrid_scores = []
+        hybrid_scores: List[Tuple[float, Dict[str, Any]]] = []
         chunks = self.repo_chunks[table_name]
         
         for i, chunk in enumerate(chunks):
@@ -154,10 +197,28 @@ class Retriever:
             
         # Sort by final score descending
         hybrid_scores.sort(key=lambda x: x[0], reverse=True)
-        
-        # Return top_k chunks
-        top_chunks = [item[1] for item in hybrid_scores[:top_k]]
-        return top_chunks
+
+        # Optional cross-encoder re-ranking of the strongest hybrid candidates.
+        if self.cross_encoder is not None and re_rank and hybrid_scores:
+            # Take a manageable candidate pool for re-ranking.
+            pool = hybrid_scores[: min(re_rank_top_k, len(hybrid_scores))]
+            texts = [
+                c.get("text", "")
+                for _, c in pool
+            ]
+            # Each item is scored as (query, candidate_chunk).
+            try:
+                pairs = [(query, t) for t in texts]
+                ce_scores = self.cross_encoder.predict(pairs)
+                scored = list(zip(ce_scores, (c for _, c in pool)))
+                scored.sort(key=lambda x: x[0], reverse=True)
+                return [c for _, c in scored[:top_k]]
+            except Exception:
+                # If anything goes wrong, fall back to the original hybrid ranking.
+                pass
+
+        # Default: return top_k chunks by hybrid score.
+        return [item[1] for item in hybrid_scores[:top_k]]
 
 
 if __name__ == "__main__":

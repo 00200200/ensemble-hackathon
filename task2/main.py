@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -10,22 +11,54 @@ from tqdm import tqdm
 from chunker import extract_repo, process_repository
 from retriever import Retriever
 
+try:
+    from transformers import AutoTokenizer  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    AutoTokenizer = None  # type: ignore
+
 
 FILE_SEP_TOKEN = "<|file_sep|>"
 
 # Conservative shared budget so that no model needs to further trim.
 DEFAULT_TOKEN_BUDGET = 8000
 
+# Prefer using the Qwen2.5-Coder tokenizer for budgeting, but allow overrides.
+DEFAULT_TOKENIZER_MODEL = os.getenv(
+    "TASK2_TOKENIZER_MODEL",
+    "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+)
 
-def simple_token_count(text: str) -> int:
-    """
-    Lightweight token estimator.
+if AutoTokenizer is not None:
+    try:
+        TOKENIZER = AutoTokenizer.from_pretrained(
+            DEFAULT_TOKENIZER_MODEL,
+            trust_remote_code=True,
+        )
+    except Exception:
+        TOKENIZER = None
+else:
+    TOKENIZER = None
 
-    We avoid heavyweight tokenizer dependencies and approximate tokens by
-    whitespace‑separated words. For relative budgeting and ordering this is
-    sufficient, and keeps the pipeline fast and dependency‑light.
+
+@lru_cache(maxsize=10000)
+def count_tokens(text: str) -> int:
     """
-    return len(text.split())
+    Token counter aligned with the target model tokenizer when available.
+
+    Falls back to a simple whitespace-based heuristic if the tokenizer cannot
+    be loaded. Cached for efficiency across repeated chunk texts.
+    """
+    if not text:
+        return 0
+
+    if TOKENIZER is None:
+        return len(text.split())
+
+    try:
+        # Avoid adding special tokens, we just care about raw length.
+        return len(TOKENIZER.encode(text, add_special_tokens=False))
+    except Exception:
+        return len(text.split())
 
 
 def extract_keywords(prefix: str, suffix: str) -> str:
@@ -95,7 +128,7 @@ def budgeted_selection(
     used = 0
     for chunk in results:
         text = chunk.get("text", "")
-        tokens = simple_token_count(text)
+        tokens = count_tokens(text)
         if tokens <= 0:
             continue
         if used + tokens > token_budget:
@@ -113,12 +146,11 @@ def expand_with_dependencies(
     max_extra: int = 8,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
-    Very simple 1‑hop dependency expansion:
+    1‑hop dependency expansion within the remaining token budget.
 
-    - Each chunk from the chunker may contain a `calls` field listing local
-      functions/classes it invokes.
-    - For each base chunk, we add chunks whose `name` matches any of those
-      calls, subject to the remaining token budget.
+    - Callees: for each chunk, add functions/classes it calls (via `calls`).
+    - Callers: also add functions/classes that call the selected chunk.
+    - Class hierarchy: for class chunks, add base classes (via `bases`).
     """
     name_to_chunk: Dict[str, Dict[str, Any]] = {}
     for c in all_chunks:
@@ -127,32 +159,59 @@ def expand_with_dependencies(
             continue
         name_to_chunk[name] = c
 
+    # Build a reverse index for callers: callee_name -> [caller_chunks]
+    callers: Dict[str, List[Dict[str, Any]]] = {}
+    for c in all_chunks:
+        for callee in c.get("calls") or []:
+            if not callee:
+                continue
+            if callee not in name_to_chunk:
+                continue
+            callers.setdefault(callee, []).append(c)
+
     selected_ids = {id(c) for c in base_chunks}
     extras: List[Dict[str, Any]] = []
     used = already_used_tokens
 
+    def maybe_add(target: Dict[str, Any]) -> bool:
+        nonlocal used
+        if id(target) in selected_ids:
+            return False
+        text = target.get("text", "")
+        tokens = count_tokens(text)
+        if tokens <= 0:
+            return False
+        if used + tokens > token_budget:
+            return False
+        extras.append(target)
+        selected_ids.add(id(target))
+        used += tokens
+        return True
+
     for chunk in base_chunks:
-        calls = chunk.get("calls") or []
-        for name in calls:
+        # 1) Follow outgoing calls (callees).
+        for name in chunk.get("calls") or []:
             target = name_to_chunk.get(name)
             if not target:
                 continue
-            if id(target) in selected_ids:
-                continue
+            if maybe_add(target) and len(extras) >= max_extra:
+                return extras, used
 
-            text = target.get("text", "")
-            tokens = simple_token_count(text)
-            if tokens <= 0:
-                continue
-            if used + tokens > token_budget:
-                continue
+        # 2) Add callers that reference this chunk by name.
+        name = chunk.get("name")
+        if name and name in callers:
+            for caller in callers[name]:
+                if maybe_add(caller) and len(extras) >= max_extra:
+                    return extras, used
 
-            extras.append(target)
-            selected_ids.add(id(target))
-            used += tokens
-
-            if len(extras) >= max_extra:
-                break
+        # 3) For class chunks, add base classes.
+        if chunk.get("type") == "class":
+            for base_name in chunk.get("bases") or []:
+                base_chunk = name_to_chunk.get(base_name)
+                if not base_chunk:
+                    continue
+                if maybe_add(base_chunk) and len(extras) >= max_extra:
+                    return extras, used
 
     return extras, used
 
@@ -192,8 +251,19 @@ def run_pipeline(
     retriever = Retriever()
 
     # In‑memory cache within a single run:
-    # archive_name -> (table_name, total_tokens_for_repo)
+    # archive_name -> table_name
     repo_cache: Dict[str, str] = {}
+
+    # Persistent on-disk cache of chunked repositories to speed up
+    # experimentation across runs.
+    cache_root = Path(
+        os.getenv(
+            "TASK2_CACHE_DIR",
+            Path.home() / ".cache" / "task2",
+        ),
+    )
+    chunks_cache_dir = cache_root / "chunks"
+    chunks_cache_dir.mkdir(parents=True, exist_ok=True)
 
     with input_path.open("r", encoding="utf-8") as fin, output_path.open(
         "w",
@@ -223,9 +293,21 @@ def run_pipeline(
                     fout.write("\n")
                     continue
 
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    extract_repo(str(archive_path), tmpdir)
-                    chunks = process_repository(tmpdir)
+                cache_file = chunks_cache_dir / f"{archive_name}.jsonl"
+                if cache_file.exists():
+                    # Load pre-chunked repository from cache.
+                    chunks: List[Dict[str, Any]] = []
+                    with cache_file.open("r", encoding="utf-8") as cf:
+                        for line_c in cf:
+                            chunks.append(json.loads(line_c))
+                else:
+                    # First time seeing this repo: extract, chunk, and cache.
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        extract_repo(str(archive_path), tmpdir)
+                        chunks = process_repository(tmpdir)
+                    with cache_file.open("w", encoding="utf-8") as cf:
+                        for ch in chunks:
+                            cf.write(json.dumps(ch) + "\n")
 
                 table_name = archive_name  # unique enough per repo+revision
                 retriever.build_index(table_name, chunks)
@@ -235,12 +317,14 @@ def run_pipeline(
             query = build_query(prefix, suffix)
 
             # Retrieve more than we will ultimately keep, then perform
-            # token‑aware selection.
+            # token‑aware selection with optional cross-encoder re-ranking.
             results = retriever.search(
                 table_name,
                 query,
                 top_k=top_k,
                 alpha=alpha,
+                re_rank=True,
+                re_rank_top_k=max(top_k * 3, 30),
             )
 
             if not results:
@@ -249,7 +333,7 @@ def run_pipeline(
                 continue
 
             selected = budgeted_selection(results, token_budget)
-            used_tokens = sum(simple_token_count(c.get("text", "")) for c in selected)
+            used_tokens = sum(count_tokens(c.get("text", "")) for c in selected)
 
             # Dependency‑aware expansion (1‑hop) within remaining budget.
             all_chunks = retriever.repo_chunks.get(table_name, [])
