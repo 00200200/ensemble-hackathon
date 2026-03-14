@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "lancedb>=0.29.2",
     "rank-bm25>=0.2.2",
+    "sentence-transformers>=5.3.0",
     "tqdm>=4.67.3",
     "tree-sitter>=0.25.2",
     "tree-sitter-python>=0.25.0",

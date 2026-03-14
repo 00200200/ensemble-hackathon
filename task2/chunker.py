@@ -14,6 +14,26 @@ from tree_sitter import Language, Node, Parser
 PY_LANGUAGE = Language(tree_sitter_python.language())
 parser = Parser(PY_LANGUAGE)
 
+# Core Tree-sitter queries for Python code structure
+CORE_QUERY = """
+(function_definition name: (identifier) @func.name) @function.def
+(class_definition name: (identifier) @class.name) @class.def
+"""
+
+BASE_QUERY = """
+(class_definition superclasses: (argument_list (identifier) @class.base)) @class.with_base
+"""
+
+CALL_QUERY = """
+(call function: (identifier) @called_func)
+(call function: (attribute attribute: (identifier) @called_func))
+"""
+
+IMPORT_QUERY = """
+(import_statement) @import.stmt
+(import_from_statement) @importfrom.stmt
+"""
+
 def extract_repo(zip_path: str, extract_to: str):
     """Extracts a repository zip file to a specified directory."""
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -38,28 +58,9 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
     tree = parser.parse(source_bytes)
     source_text = source_bytes.decode("utf-8", errors="ignore")
 
-    # We query for function definitions and class definitions
-    query_str = """
-    (function_definition
-      name: (identifier) @func.name
-    ) @function.def
-    
-    (class_definition
-      name: (identifier) @class.name
-    ) @class.def
-    """
-    
-    try:
-        query = PY_LANGUAGE.query(query_str)
-        captures = query.captures(tree.root_node)
-    except Exception:
-        # Fallback to whole file if querying fails
-        chunks.append({
-            "filepath": filepath,
-            "text": source_bytes.decode('utf-8', errors='ignore'),
-            "type": "file_content",
-        })
-        return chunks
+    # Core definitions: functions and classes (independent of inheritance)
+    core_query = PY_LANGUAGE.query(CORE_QUERY)
+    core_captures = core_query.captures(tree.root_node)
 
     # Reconstruct blocks based on captures. `captures` is a list of tuples:
     # (Node, capture_name). The list is ordered by occurrence. A `function.def`
@@ -68,7 +69,7 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
 
     def_spans: List[Tuple[Node, Dict[str, Any]]] = []
 
-    for node, capture_name in captures:
+    for node, capture_name in core_captures:
         if capture_name in ("function.def", "class.def"):
             chunk_type = "function" if capture_name == "function.def" else "class"
 
@@ -116,46 +117,33 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
     #   obj.method(...) -> attribute with an identifier `method`
     #
     # and then match them against locally defined names.
-    call_query_str = """
-    (call
-      function: (identifier) @called_func) @call
-
-    (call
-      function: (attribute
-        attribute: (identifier) @called_func)) @call
-    """
-
     calls_per_chunk: Dict[int, Set[str]] = {id(c): set() for c in chunks}
     defined_names = {c.get("name") for c in chunks if c.get("name")}
 
-    try:
-        call_query = PY_LANGUAGE.query(call_query_str)
-        call_captures = call_query.captures(tree.root_node)
+    call_query = PY_LANGUAGE.query(CALL_QUERY)
+    call_captures = call_query.captures(tree.root_node)
 
-        def find_chunk_for_node(node: Node) -> Optional[Dict[str, Any]]:
-            start = node.start_byte
-            end = node.end_byte
-            for def_node, chunk in def_spans:
-                if def_node.start_byte <= start and end <= def_node.end_byte:
-                    return chunk
-            return None
+    def find_chunk_for_node(node: Node) -> Optional[Dict[str, Any]]:
+        start = node.start_byte
+        end = node.end_byte
+        for def_node, chunk in def_spans:
+            if def_node.start_byte <= start and end <= def_node.end_byte:
+                return chunk
+        return None
 
-        for node, cap_name in call_captures:
-            if cap_name != "called_func":
-                continue
-            name = source_bytes[node.start_byte:node.end_byte].decode(
-                "utf-8",
-                errors="ignore",
-            )
-            if name not in defined_names:
-                continue
-            owner_chunk = find_chunk_for_node(node)
-            if owner_chunk is None:
-                continue
-            calls_per_chunk[id(owner_chunk)].add(name)
-    except Exception:
-        # If call extraction fails, we fall back to an empty call graph.
-        pass
+    for node, cap_name in call_captures:
+        if cap_name != "called_func":
+            continue
+        name = source_bytes[node.start_byte:node.end_byte].decode(
+            "utf-8",
+            errors="ignore",
+        )
+        if name not in defined_names:
+            continue
+        owner_chunk = find_chunk_for_node(node)
+        if owner_chunk is None:
+            continue
+        calls_per_chunk[id(owner_chunk)].add(name)
 
     for chunk in chunks:
         chunk["calls"] = sorted(calls_per_chunk.get(id(chunk), set()))
@@ -163,88 +151,71 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
     # ------------------------------------------------------------------
     # 2. Base class extraction: record simple inheritance dependencies
     # ------------------------------------------------------------------
-    base_query_str = """
-    (class_definition
-      name: (identifier) @class.name
-      superclasses: (argument_list (identifier) @class.base)) @class.def
-    """
-    try:
-        base_query = PY_LANGUAGE.query(base_query_str)
-        base_captures = base_query.captures(tree.root_node)
+    base_query = PY_LANGUAGE.query(BASE_QUERY)
+    base_captures = base_query.captures(tree.root_node)
 
-        bases_per_chunk: Dict[int, Set[str]] = {}
+    bases_per_chunk: Dict[int, Set[str]] = {}
 
-        def find_class_chunk(node: Node) -> Optional[Dict[str, Any]]:
-            # Walk up to the enclosing class_definition, then map via def_spans.
-            current: Optional[Node] = node
-            while current is not None and current.type != "class_definition":
-                current = current.parent
-            if current is None:
-                return None
-            for def_node, chunk in def_spans:
-                if def_node is current:
-                    return chunk
+    def find_class_chunk(node: Node) -> Optional[Dict[str, Any]]:
+        # Walk up to the enclosing class_definition, then map via def_spans.
+        current: Optional[Node] = node
+        while current is not None and current.type != "class_definition":
+            current = current.parent
+        if current is None:
             return None
+        for def_node, chunk in def_spans:
+            if def_node is current:
+                return chunk
+        return None
 
-        for node, cap_name in base_captures:
-            if cap_name != "class.base":
-                continue
-            base_name = source_bytes[node.start_byte:node.end_byte].decode(
-                "utf-8",
-                errors="ignore",
-            )
-            owner_chunk = find_class_chunk(node)
-            if owner_chunk is None:
-                continue
-            bases_per_chunk.setdefault(id(owner_chunk), set()).add(base_name)
+    for node, cap_name in base_captures:
+        if cap_name != "class.base":
+            continue
+        base_name = source_bytes[node.start_byte:node.end_byte].decode(
+            "utf-8",
+            errors="ignore",
+        )
+        owner_chunk = find_class_chunk(node)
+        if owner_chunk is None:
+            continue
+        bases_per_chunk.setdefault(id(owner_chunk), set()).add(base_name)
 
-        for chunk in chunks:
-            chunk["bases"] = sorted(bases_per_chunk.get(id(chunk), set()))
-    except Exception:
-        # If base extraction fails we simply skip inheritance edges.
-        for chunk in chunks:
-            chunk.setdefault("bases", [])
+    for chunk in chunks:
+        chunk["bases"] = sorted(bases_per_chunk.get(id(chunk), set()))
 
     # ------------------------------------------------------------------
     # 3. Import chunks: treat import statements as independent retrievable
     #    units, since they often carry high-signal library information.
     # ------------------------------------------------------------------
     import_chunks: List[Dict[str, Any]] = []
-    try:
-        import_query_str = """
-        (import_statement) @import.stmt
-        (import_from_statement) @importfrom.stmt
-        """
-        import_query = PY_LANGUAGE.query(import_query_str)
-        import_captures = import_query.captures(tree.root_node)
+    import_query = PY_LANGUAGE.query(IMPORT_QUERY)
+    import_captures = import_query.captures(tree.root_node)
 
-        def node_text(n: Node) -> str:
-            return source_bytes[n.start_byte:n.end_byte].decode(
-                "utf-8",
-                errors="ignore",
-            )
+    def node_text(n: Node) -> str:
+        return source_bytes[n.start_byte:n.end_byte].decode(
+            "utf-8",
+            errors="ignore",
+        )
 
-        for node, cap_name in import_captures:
-            stmt_text = node_text(node)
-            module_name = ""
+    for node, cap_name in import_captures:
+        stmt_text = node_text(node)
+        module_name = ""
 
-            # Find the first dotted_name child as module name.
-            for child in node.children:
-                if child.type == "dotted_name":
-                    module_name = node_text(child)
-                    break
+        # Try to extract a dotted module name if present.
+        for child in node.children:
+            if child.type == "dotted_name":
+                module_name = node_text(child)
+                break
 
-            if not module_name:
-                module_name = stmt_text.strip()
+        if not module_name:
+            module_name = stmt_text.strip()
 
-            import_chunks.append({
-                "filepath": filepath,
-                "name": module_name,
-                "text": stmt_text,
-                "type": "import",
-            })
-    except Exception:
-        import_chunks = []
+        import_chunks.append({
+            "filepath": filepath,
+            "name": module_name,
+            "text": stmt_text,
+            "type": "import",
+        })
 
     chunks.extend(import_chunks)
     return chunks
