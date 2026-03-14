@@ -55,45 +55,65 @@ def chunk_python_file(filepath: str) -> List[Dict[str, Any]]:
         chunks.append({
             "filepath": filepath,
             "text": source_bytes.decode('utf-8', errors='ignore'),
-            "type": "file_content"
+            "type": "file_content",
         })
         return chunks
 
-    # Reconstruct blocks based on captures. captures is a list of tuples: (Node, string_tag)
-    # The list is ordered by occurrence. A function.def or class.def is typically 
-    # matched along with its name (func.name or class.name).
-    
-    # Simple strategy: iterate captures and find full block definitions
-    for node, name in captures.items():
-        if name in ["function.def", "class.def"]:
-            chunk_type = "function" if name == "function.def" else "class"
-            
-            # Find the name node which is a child
+    # Reconstruct blocks based on captures. `captures` is a list of tuples:
+    # (Node, capture_name). The list is ordered by occurrence. A `function.def`
+    # or `class.def` is typically matched along with its name (`func.name` or
+    # `class.name`).
+
+    for node, capture_name in captures:
+        if capture_name in ("function.def", "class.def"):
+            chunk_type = "function" if capture_name == "function.def" else "class"
+
+            # Find the identifier child node which holds the name.
             name_node = None
             for child in node.children:
                 if child.type == "identifier":
                     name_node = child
                     break
-            
+
             block_name = ""
             if name_node:
-                block_name = source_bytes[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                block_name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
 
-            chunk_text = source_bytes[node.start_byte:node.end_byte].decode('utf-8')
+            chunk_text = source_bytes[node.start_byte:node.end_byte].decode("utf-8")
             chunks.append({
                 "filepath": filepath,
                 "name": block_name,
                 "text": chunk_text,
-                "type": chunk_type
+                "type": chunk_type,
             })
 
     # If the file has no functions/classes, include the whole file
     if not chunks:
         chunks.append({
             "filepath": filepath,
-            "text": source_bytes.decode('utf-8', errors='ignore'),
-            "type": "file_content"
+            "text": source_bytes.decode("utf-8", errors="ignore"),
+            "type": "file_content",
         })
+        return chunks
+
+    # Lightweight, name-based call graph:
+    # for each chunk, record which other locally-defined functions/classes are
+    # invoked inside its body. This is later used for simple 1‑hop dependency
+    # expansion when assembling context.
+    defined_names = {c.get("name") for c in chunks if c.get("name")}
+    for chunk in chunks:
+        text = chunk.get("text", "")
+        calls = set()
+        for name in defined_names:
+            if not name:
+                continue
+            needle = f"{name}("
+            if needle in text:
+                calls.add(name)
+        if calls:
+            chunk["calls"] = sorted(calls)
+        else:
+            chunk["calls"] = []
 
     return chunks
 
