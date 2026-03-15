@@ -13,6 +13,7 @@ Implements:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -226,8 +227,9 @@ class ContextAssembler:
     
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count (rough approximation)."""
-        # Rough estimate: 1 token ≈ 4 characters for code
-        return len(text) // 4
+        # More accurate estimate: 1 token ≈ 3.5 characters for code
+        # Code has many special chars that are separate tokens
+        return int(len(text) / 3.5)
     
     def assemble(
         self,
@@ -256,18 +258,26 @@ class ContextAssembler:
         seen_entities: Set[str] = set()
         modified_files = modified_files or []
         
-        # 1. Add current file entities (highest priority)
-        # ALWAYS include current file - this is THE MOST IMPORTANT context
+        # 1. Add current file entities - TRIMMED to relevant scope
+        # Only include entity containing the cursor + parent class
+        # This saves tokens for cross-file context (imports, related files)
         logger.info(f"DEBUG: current_file_entities = {len(current_file_entities) if current_file_entities else None}")
         if current_file_entities:
-            logger.info(f"Adding {len(current_file_entities)} entities from current file")
-            for entity in current_file_entities:
+            # Find entity containing the cursor based on prefix line count
+            cursor_line = len(prefix.split('\n')) if prefix else 1
+            relevant_entities = self._find_relevant_entities_at_cursor(
+                current_file_entities, cursor_line
+            )
+            
+            logger.info(f"Adding {len(relevant_entities)} relevant entities from current file (cursor at line {cursor_line})")
+            
+            for entity in relevant_entities:
                 entity_id = entity.id if hasattr(entity, 'id') else str(entity)
                 if entity_id in seen_entities:
                     continue
                 seen_entities.add(entity_id)
                 
-                # Use FULL CODE, not abstract, for current file
+                # Use FULL CODE for current file entity
                 code = entity.raw_code if hasattr(entity, 'raw_code') else str(entity)
                 tokens = self.estimate_tokens(code)
                 
@@ -285,58 +295,94 @@ class ContextAssembler:
         
         # 2. Add entities from MODIFIED FILES - files changed in same commit
         # These are HIGHLY RELEVANT because they were modified together!
+        # BUT limit to top N files to save tokens for imports
+        MAX_MODIFIED_FILES = 10  # Limit to prevent token overflow
+        
         if modified_files and hasattr(self.graph, 'get_entities_by_file'):
-            logger.info(f"Adding entities from {len(modified_files)} modified files")
-            
-            # Calculate budget per modified file to ensure ALL are represented
             mod_files_only = [f for f in modified_files if f != current_file]
-            if mod_files_only:
-                # Use abstracts for modified files so we can fit ALL of them
-                # This is crucial - ALL modified files should be in context
-                for mod_file in mod_files_only:
+            # Limit number of modified files
+            mod_files_limited = mod_files_only[:MAX_MODIFIED_FILES]
+            
+            logger.info(f"Adding entities from {len(mod_files_limited)}/{len(mod_files_only)} modified files")
+            
+            if mod_files_limited:
+                # Only take FIRST entity from each modified file (most important)
+                for mod_file in mod_files_limited:
                     try:
                         mod_entities = self.graph.get_entities_by_file(mod_file)
                         if mod_entities:
-                            logger.info(f"  - {mod_file}: {len(mod_entities)} entities")
-                            for entity in mod_entities:
-                                entity_id = entity.id if hasattr(entity, 'id') else str(entity)
-                                if entity_id in seen_entities:
-                                    continue
-                                seen_entities.add(entity_id)
-                                
-                                # Use ABSTRACT for modified files to fit more files
-                                # Full code would be too long and crowd out other modified files
-                                code = self._create_abstract(entity)
-                                tokens = self.estimate_tokens(code)
-                                
-                                item = ContextItem(
-                                    entity=entity,
-                                    entity_id=entity_id,
-                                    source='modified_file',
-                                    relevance_score=1.8,  # HIGH relevance
-                                    code_to_show=code,  # ABSTRACT (not full code)
-                                    token_estimate=tokens
-                                )
-                                context_items.append(item)
+                            # Only take first entity (likely class or main function)
+                            entity = mod_entities[0]
+                            entity_id = entity.id if hasattr(entity, 'id') else str(entity)
+                            if entity_id in seen_entities:
+                                continue
+                            seen_entities.add(entity_id)
+                            
+                            # Use ABSTRACT for modified files to save tokens
+                            code = self._create_abstract(entity)
+                            tokens = self.estimate_tokens(code)
+                            
+                            item = ContextItem(
+                                entity=entity,
+                                entity_id=entity_id,
+                                source='modified_file',
+                                relevance_score=1.7,  # HIGH but below imports
+                                code_to_show=code,
+                                token_estimate=tokens
+                            )
+                            context_items.append(item)
                         else:
                             logger.warning(f"  - {mod_file}: NO entities found!")
                     except Exception as e:
                         logger.debug(f"Could not get entities for modified file {mod_file}: {e}")
         
-        # 2. Resolve imports from prefix - fetch definitions of imported symbols
-        # This is crucial: if code says "from .common import BasicFunctionality",
-        # we need to fetch the BasicFunctionality class definition
+        # 2. Resolve imports/dependencies - CRITICAL for base classes!
+        # Parse imports from prefix and resolve them
         if prefix and hasattr(self.graph, 'get_entities_by_name'):
             try:
-                resolver = ImportResolver(self.graph)
-                import_definitions = resolver.resolve_symbols_from_code(
-                    prefix, 
-                    current_file,
-                    max_definitions=10  # Get more imports
-                )
+                # Parse imports from prefix
+                from src.import_resolver import ImportParser
+                imports = ImportParser.extract_imports(prefix)
+                
+                logger.info(f"Found {len(imports)} imports in prefix")
+                
+                # Resolve each import
+                import_definitions = []
+                for imp in imports[:10]:  # Limit to top 10
+                    name = imp.get('name', '')
+                    if name and hasattr(self.graph, 'get_entities_by_name'):
+                        entities = self.graph.get_entities_by_name(name)
+                        if entities:
+                            # Prefer entities not in current file (cross-file)
+                            for e in entities:
+                                e_file = getattr(e, 'file_path', '')
+                                if e_file != current_file:
+                                    import_definitions.append(e)
+                                    break
+                            else:
+                                # If all in current file, take first
+                                import_definitions.append(entities[0])
+                
+                # Also look at class inheritance from raw_code
+                for entity in current_file_entities:
+                    code = getattr(entity, 'raw_code', '')
+                    if code:
+                        # Look for class inheritance patterns: class X(Y):
+                        import re
+                        match = re.search(r'class\s+\w+\s*\(([^)]+)\)', code)
+                        if match:
+                            parent_class = match.group(1).strip()
+                            if parent_class and hasattr(self.graph, 'get_entities_by_name'):
+                                entities = self.graph.get_entities_by_name(parent_class)
+                                for e in entities:
+                                    e_file = getattr(e, 'file_path', '')
+                                    if e_file != current_file:
+                                        import_definitions.append(e)
+                                        logger.info(f"Found parent class: {parent_class}")
+                                        break
                 
                 if import_definitions:
-                    logger.info(f"Resolved {len(import_definitions)} import definitions")
+                    logger.info(f"Resolved {len(import_definitions)} imports/dependencies")
                     
                     for entity in import_definitions:
                         entity_id = entity.id if hasattr(entity, 'id') else str(entity)
@@ -344,7 +390,7 @@ class ContextAssembler:
                             continue
                         seen_entities.add(entity_id)
                         
-                        # Use FULL CODE for import definitions (they're important!)
+                        # Use FULL CODE for import definitions
                         code = entity.raw_code if hasattr(entity, 'raw_code') else str(entity)
                         tokens = self.estimate_tokens(code)
                         
@@ -352,12 +398,12 @@ class ContextAssembler:
                             entity=entity,
                             entity_id=entity_id,
                             source='import_definition',
-                            relevance_score=1.5,  # High priority
-                            code_to_show=code,  # FULL CODE
+                            relevance_score=1.85,  # VERY HIGH
+                            code_to_show=code,
                             token_estimate=tokens
                         )
                         context_items.append(item)
-                        logger.debug(f"Added import definition: {getattr(entity, 'name', 'unknown')}")
+                        logger.info(f"Added import: {getattr(entity, 'name', 'unknown')} ({getattr(entity, 'file_path', 'unknown')})")
             except Exception as e:
                 logger.warning(f"Import resolution failed: {e}")
         
@@ -418,7 +464,37 @@ class ContextAssembler:
             )
             context_items.append(item)
             
-            # 4. Expand neighbors
+            # 4. Add adjacent chunks - functions before/after in same file
+            # This provides local context around the retrieved entity
+            try:
+                seed_file = getattr(seed_entity, 'file_path', '')
+                seed_line = getattr(seed_entity, 'line_start', 0)
+                if seed_file and seed_line > 0:
+                    # Get all entities from the same file
+                    file_entities = self.graph.get_entities_by_file(seed_file)
+                    for adj_entity in file_entities:
+                        adj_id = adj_entity.id if hasattr(adj_entity, 'id') else str(adj_entity)
+                        if adj_id in seen_entities:
+                            continue
+                        adj_line = getattr(adj_entity, 'line_start', 0)
+                        # Check if within 50 lines (adjacent)
+                        if abs(adj_line - seed_line) <= 50:
+                            seen_entities.add(adj_id)
+                            adj_code = self._create_abstract(adj_entity)
+                            adj_tokens = self.estimate_tokens(adj_code)
+                            adj_item = ContextItem(
+                                entity=adj_entity,
+                                entity_id=adj_id,
+                                source='adjacent_chunk',
+                                relevance_score=seed_score * 0.8,  # Slightly lower than seed
+                                code_to_show=adj_code,
+                                token_estimate=adj_tokens
+                            )
+                            context_items.append(adj_item)
+            except Exception as e:
+                logger.debug(f"Failed to add adjacent chunks: {e}")
+            
+            # 5. Expand neighbors (graph traversal)
             if hasattr(self.graph, 'get_neighbors'):
                 neighbors = self.graph.get_neighbors(
                     entity_id,
@@ -462,6 +538,56 @@ class ContextAssembler:
         # 6. Apply token budget
         return self._apply_token_budget(context_items)
     
+    def _find_relevant_entities_at_cursor(
+        self, 
+        entities: List[Any], 
+        cursor_line: int
+    ) -> List[Any]:
+        """
+        Find entities relevant at cursor position.
+        
+        Returns the entity containing the cursor + parent class if applicable.
+        This avoids including the entire file which wastes tokens.
+        """
+        if not entities:
+            return []
+        
+        # Find the deepest entity containing the cursor
+        containing = []
+        for entity in entities:
+            line_start = getattr(entity, 'line_start', 0)
+            line_end = getattr(entity, 'line_end', 0)
+            
+            if line_start <= cursor_line <= line_end:
+                containing.append(entity)
+        
+        if not containing:
+            # Cursor not in any entity, return class/module level if exists
+            classes = [e for e in entities if getattr(e, 'type', '') == 'class']
+            if classes:
+                # Return the class with most methods (likely the main one)
+                return [max(classes, key=lambda e: len(getattr(e, 'dependencies', [])))]
+            return entities[:1]  # Return first entity as fallback
+        
+        # Find the deepest (smallest range) containing entity
+        containing.sort(key=lambda e: 
+            getattr(e, 'line_end', 0) - getattr(e, 'line_start', 0)
+        )
+        deepest = containing[0]
+        result = [deepest]
+        
+        # If deepest is a method, also include parent class
+        if getattr(deepest, 'type', '') == 'method':
+            parent_name = getattr(deepest, 'parent', None)
+            if parent_name:
+                for entity in entities:
+                    if (getattr(entity, 'type', '') == 'class' and 
+                        getattr(entity, 'name', '') == parent_name):
+                        result.insert(0, entity)  # Parent first
+                        break
+        
+        return result
+    
     def _create_abstract(self, entity: Any) -> str:
         """Create context for an entity - ALWAYS use full code for important entities."""
         # For retrieved/secondary entities, use full code (not useless signatures!)
@@ -485,20 +611,20 @@ class ContextAssembler:
     def _apply_token_budget(
         self,
         items: List[ContextItem],
-        current_file_budget: float = 0.35,  # 35% for current file
-        modified_file_budget: float = 0.40,  # 40% for modified files - MOST IMPORTANT!
-        import_budget: float = 0.15,  # 15% for imports
-        cross_file_budget: float = 0.08  # 8% for other retrieved code
+        current_file_budget: float = 0.30,  # 30% for current file (trimmed)
+        import_budget: float = 0.30,  # 30% for imports - CRITICAL for base classes!
+        modified_file_budget: float = 0.25,  # 25% for modified files
+        cross_file_budget: float = 0.12  # 12% for other retrieved code
     ) -> List[ContextItem]:
         """
         Apply token budget constraints.
         
         Budget allocation:
-        - 35% current file 
-        - 40% modified files (changed in same commit - CRITICAL context!)
-        - 15% import definitions
-        - 8% other cross-file context
-        - 2% buffer
+        - 30% current file (trimmed to relevant scope)
+        - 30% import definitions - CRITICAL for base classes like AttributeGetter!
+        - 25% modified files (co-changed)
+        - 12% other cross-file context
+        - 3% buffer
         """
         current_file_tokens = int(self.max_tokens * current_file_budget)
         modified_file_tokens = int(self.max_tokens * modified_file_budget)
@@ -630,19 +756,19 @@ class ContextAssembler:
         # Sort items for ASCENDING relevance order (least relevant first)
         # This ensures most relevant survive left-truncation
         def get_sort_key(item):
-            # Primary: source priority (lower = more important = later in list)
+            # Primary: source priority (HIGHER = more important = appears LATER in list)
+            # We want: retrieval_seed (lowest) < import < modified_file < current_file (highest)
             if item.source == 'current_file':
-                priority = 0
+                priority = 3  # HIGHEST - appears LAST
             elif item.source == 'modified_file':
-                priority = 1
-            elif item.source == 'import_definition':
                 priority = 2
+            elif item.source == 'import_definition':
+                priority = 1
             else:
-                priority = 3
+                priority = 0  # retrieval_seed - appears FIRST
             
             # Secondary: relevance score (lower score = less relevant = earlier in list)
-            # Negate score so higher scores come later
-            return (priority, -item.relevance_score)
+            return (priority, item.relevance_score)
         
         sorted_items = sorted(items, key=get_sort_key)
         

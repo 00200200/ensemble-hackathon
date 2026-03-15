@@ -219,8 +219,8 @@ class CompletionPipeline:
         if cache_key not in self._repo_cache:
             repo_path = self.get_repo_path(task)
             if not repo_path:
-                # Fallback: return empty context with prefix/suffix
-                return {"context": "", "prefix": prefix, "suffix": suffix}
+                # Fallback: return empty context
+                return {"context": ""}
             
             graph, retriever = self.repo_processor.process_repository(
                 repo_path,
@@ -240,11 +240,9 @@ class CompletionPipeline:
         
         context = assembler.assemble_for_task(task, graph, retriever)
         
-        # Return dict with context, prefix, and suffix
+        # Return dict with context only
         return {
-            "context": context,
-            "prefix": prefix,
-            "suffix": suffix
+            "context": context
         }
     
     def process_jsonl(
@@ -315,11 +313,9 @@ class CompletionPipeline:
                     import traceback
                     traceback.print_exc()
                     
-                    # Write empty context on error (with prefix/suffix if available)
+                    # Write empty context on error
                     prediction = {
-                        "context": "",
-                        "prefix": task.get('prefix', ''),
-                        "suffix": task.get('suffix', '')
+                        "context": ""
                     }
                     f_out.write(json.dumps(prediction) + '\n')
                 

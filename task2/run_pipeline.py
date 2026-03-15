@@ -32,7 +32,7 @@ def main():
     parser.add_argument(
         '--cache',
         type=Path,
-        default=Path('cache'),
+        default=Path('.cache'),
         help='Cache directory'
     )
     parser.add_argument(
