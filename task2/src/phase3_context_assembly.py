@@ -258,6 +258,7 @@ class ContextAssembler:
         
         # 1. Add current file entities (highest priority)
         # ALWAYS include current file - this is THE MOST IMPORTANT context
+        logger.info(f"DEBUG: current_file_entities = {len(current_file_entities) if current_file_entities else None}")
         if current_file_entities:
             logger.info(f"Adding {len(current_file_entities)} entities from current file")
             for entity in current_file_entities:
@@ -362,21 +363,49 @@ class ContextAssembler:
         
         # 3. Retrieve seeds from hybrid retriever
         # Increase seed count to get more candidates
-        seeds = self.retriever.search(query, k=self.seed_count * 3)
+        seeds = self.retriever.search(query, k=self.seed_count * 5)  # Get more candidates for filtering
         
+        # Filter and score seeds
+        filtered_seeds = []
         for seed_entity, seed_score in seeds:
             entity_id = seed_entity.id if hasattr(seed_entity, 'id') else str(seed_entity)
             if entity_id in seen_entities:
                 continue
-            seen_entities.add(entity_id)
+            
+            file_path = getattr(seed_entity, 'file_path', '')
+            entity_name = getattr(seed_entity, 'name', '')
+            
+            # Skip low-value entities
+            # Skip empty test functions
+            if 'test' in file_path.lower() and entity_name.startswith(('test_', 'empty_')):
+                raw_code = getattr(seed_entity, 'raw_code', '')
+                if len(raw_code) < 100:  # Skip tiny test functions
+                    continue
+            
+            # Skip utility functions with generic names
+            if entity_name in ('setup', 'teardown', '__init__', 'main') and seed_score < 0.5:
+                continue
+            
+            # Boost source files over test files
+            if 'test' not in file_path.lower() and '/tests/' not in file_path:
+                seed_score *= 1.2
             
             # Apply centrality penalty if high-degree
             degree = self.graph.get_degree(entity_id) if hasattr(self.graph, 'get_degree') else 0
             if degree > self.centrality_threshold:
                 seed_score *= self.centrality_penalty
             
-            # Use FULL CODE for retrieved seeds too - abstracts are useless!
-            code = seed_entity.raw_code if hasattr(seed_entity, 'raw_code') else str(seed_entity)
+            filtered_seeds.append((seed_entity, seed_score))
+        
+        # Sort by score and take top k
+        filtered_seeds.sort(key=lambda x: x[1], reverse=True)
+        
+        for seed_entity, seed_score in filtered_seeds[:self.seed_count]:
+            entity_id = seed_entity.id if hasattr(seed_entity, 'id') else str(seed_entity)
+            seen_entities.add(entity_id)
+            
+            # Use ABSTRACT for retrieved seeds (full code would be too long)
+            code = self._create_abstract(seed_entity)
             tokens = self.estimate_tokens(code)
             
             item = ContextItem(
@@ -384,7 +413,7 @@ class ContextAssembler:
                 entity_id=entity_id,
                 source='retrieval_seed',
                 relevance_score=seed_score,
-                code_to_show=code,  # FULL CODE
+                code_to_show=code,  # Abstract
                 token_estimate=tokens
             )
             context_items.append(item)
@@ -423,40 +452,35 @@ class ContextAssembler:
         # This ensures most relevant content survives left-truncation
         context_items.sort(key=lambda x: x.relevance_score)
         
+        # DEBUG: Check what we have before budget
+        logger.info(f"DEBUG before budget: {len(context_items)} items")
+        sources = {}
+        for item in context_items:
+            sources[item.source] = sources.get(item.source, 0) + 1
+        logger.info(f"DEBUG sources: {sources}")
+        
         # 6. Apply token budget
         return self._apply_token_budget(context_items)
     
     def _create_abstract(self, entity: Any) -> str:
-        """Create a functional abstract for an entity."""
-        # Try LLM abstractor first if enabled
-        if self.use_llm_abstracts and self.llm_abstractor:
-            try:
-                llm_abstract = self.llm_abstractor.get_abstract(entity)
-                if llm_abstract and len(llm_abstract) > 10:
-                    # Add signature as header if not in abstract
-                    signature = getattr(entity, 'signature', '')
-                    if signature and signature not in llm_abstract:
-                        return f"{signature}\n{llm_abstract}"
-                    return llm_abstract
-            except Exception as e:
-                logger.debug(f"LLM abstract failed: {e}")
+        """Create context for an entity - ALWAYS use full code for important entities."""
+        # For retrieved/secondary entities, use full code (not useless signatures!)
+        code = getattr(entity, 'raw_code', '')
+        if code:
+            # Return full code but truncated reasonably
+            return code
         
-        # Fallback: manual abstract
+        # Ultimate fallback
+        signature = getattr(entity, 'signature', '')
+        docstring = getattr(entity, 'docstring', '')
+        
         parts = []
+        if signature:
+            parts.append(signature)
+        if docstring:
+            parts.append(f'"""{docstring}"""')
         
-        if hasattr(entity, 'signature') and entity.signature:
-            parts.append(entity.signature)
-        
-        if hasattr(entity, 'docstring') and entity.docstring:
-            parts.append(f'"""{entity.docstring}"""')
-        
-        # If no signature/docstring, show first few lines
-        if not parts and hasattr(entity, 'raw_code') and entity.raw_code:
-            lines = entity.raw_code.split('\n')[:5]
-            parts.append('\n'.join(lines))
-            parts.append("# ... (truncated)")
-        
-        return '\n'.join(parts)
+        return '\n'.join(parts) if parts else str(entity)
     
     def _apply_token_budget(
         self,
@@ -490,12 +514,15 @@ class ContextAssembler:
         for item in items:
             if item.source == 'current_file':
                 # Highest priority - current file entities
+                logger.debug(f"Current file entity: {item.entity_id}, tokens: {item.token_estimate}")
                 if current_file_used + item.token_estimate <= current_file_tokens:
                     result.append(item)
                     current_file_used += item.token_estimate
+                    logger.debug(f"  -> Added, used: {current_file_used}/{current_file_tokens}")
                 else:
                     # Try to truncate
                     remaining = current_file_tokens - current_file_used
+                    logger.debug(f"  -> Too big, remaining: {remaining}")
                     if remaining > 100:
                         truncated_code = self._truncate_code(item.code_to_show, remaining)
                         if truncated_code:
@@ -503,6 +530,7 @@ class ContextAssembler:
                             item.token_estimate = remaining
                             result.append(item)
                             current_file_used += remaining
+                            logger.debug(f"  -> Truncated and added")
                             
             elif item.source == 'modified_file':
                 # Second priority - modified files (co-changed)
@@ -547,6 +575,18 @@ class ContextAssembler:
                    f"modified={modified_file_used}/{modified_file_tokens}, "
                    f"imports={import_used}/{import_tokens}, cross_file={cross_file_used}/{cross_file_tokens}")
         
+        # DEBUG: Log relevance ordering
+        if result:
+            scores = [item.relevance_score for item in result]
+            sources = [item.source for item in result]
+            logger.info(f"DEBUG: {len(result)} items, scores min={min(scores):.3f}, max={max(scores):.3f}")
+            logger.info(f"DEBUG: First 3 sources: {sources[:3]}, Last 3 sources: {sources[-3:]}")
+            
+            # Check if current file is at the end (highest relevance)
+            current_file_positions = [i for i, item in enumerate(result) if item.source == 'current_file']
+            if current_file_positions:
+                logger.info(f"DEBUG: Current file entities at positions: {current_file_positions} (should be at end)")
+        
         return result
     
     def _truncate_code(self, code: str, max_tokens: int) -> str:
@@ -566,31 +606,71 @@ class ContextAssembler:
         
         return truncated + "\n# ... (truncated)"
     
+    def _is_duplicate(self, item: ContextItem, seen_ranges: Dict[str, List[Tuple[int, int]]]) -> bool:
+        """Check if entity is already covered by a parent class."""
+        file_path = getattr(item.entity, 'file_path', '')
+        line_start = getattr(item.entity, 'line_start', 0)
+        line_end = getattr(item.entity, 'line_end', 0)
+        
+        if file_path in seen_ranges:
+            for (start, end) in seen_ranges[file_path]:
+                # If this entity is fully contained within a seen range, it's a duplicate
+                if start <= line_start and line_end <= end:
+                    return True
+        return False
+    
     def format_context(self, items: List[ContextItem]) -> str:
         """Format context items into a string."""
         if not items:
             return ""
         
         parts = []
+        seen_ranges: Dict[str, List[Tuple[int, int]]] = {}  # Track covered line ranges
         
-        # Sort items by source priority: current_file > modified_file > import_definition > others
-        def get_priority(item):
+        # Sort items for ASCENDING relevance order (least relevant first)
+        # This ensures most relevant survive left-truncation
+        def get_sort_key(item):
+            # Primary: source priority (lower = more important = later in list)
             if item.source == 'current_file':
-                return (0, item.entity_id)
+                priority = 0
             elif item.source == 'modified_file':
-                return (1, item.entity_id)  # Modified files are 2nd priority
+                priority = 1
             elif item.source == 'import_definition':
-                return (2, item.entity_id)
+                priority = 2
             else:
-                return (3, item.entity_id)
+                priority = 3
+            
+            # Secondary: relevance score (lower score = less relevant = earlier in list)
+            # Negate score so higher scores come later
+            return (priority, -item.relevance_score)
         
-        sorted_items = sorted(items, key=get_priority)
+        sorted_items = sorted(items, key=get_sort_key)
+        
+        # Log ordering for debugging
+        if sorted_items:
+            scores = [item.relevance_score for item in sorted_items]
+            sources = [item.source for item in sorted_items]
+            logger.debug(f"Ordering: scores min={min(scores):.2f}, max={max(scores):.2f}")
+            logger.debug(f"Sources order: {sources[:5]}...{sources[-5:]}")
         
         # Group by file for better organization (but maintain priority order)
         file_groups: Dict[str, List[ContextItem]] = {}
         file_order = []
         for item in sorted_items:
+            # Skip duplicates (methods already in class)
+            if self._is_duplicate(item, seen_ranges):
+                logger.debug(f"Skipping duplicate: {item.entity_id}")
+                continue
+            
+            # Track this entity's range
             file_path = getattr(item.entity, 'file_path', 'unknown')
+            line_start = getattr(item.entity, 'line_start', 0)
+            line_end = getattr(item.entity, 'line_end', 0)
+            
+            if file_path not in seen_ranges:
+                seen_ranges[file_path] = []
+            seen_ranges[file_path].append((line_start, line_end))
+            
             if file_path not in file_groups:
                 file_groups[file_path] = []
                 file_order.append(file_path)
@@ -638,8 +718,10 @@ class ContextAssembler:
         
         # Get current file entities from graph
         current_file_entities = None
+        logger.info(f"DEBUG assemble_for_task: graph type = {type(graph)}, has get_entities_by_file = {hasattr(graph, 'get_entities_by_file')}")
         if hasattr(graph, 'get_entities_by_file'):
             current_file_entities = graph.get_entities_by_file(current_file)
+            logger.info(f"DEBUG assemble_for_task: got {len(current_file_entities) if current_file_entities else 0} entities for {current_file}")
         
         # Assemble context with modified files
         context_items = self.assemble(

@@ -56,6 +56,7 @@ class RepositoryProcessor:
         index_cache = self.cache_dir / f"{cache_key}_index.pkl"
         
         # Try to load from cache
+        logger.info(f"DEBUG: Looking for cache at {graph_cache}, exists={graph_cache.exists()}")
         if graph_cache.exists():
             try:
                 logger.info(f"Loading cached graph from {graph_cache}")
@@ -69,6 +70,7 @@ class RepositoryProcessor:
                     logger.info("Cached index found but reloading")
                 
                 logger.info(f"Loaded {len(graph)} entities from cache")
+                logger.info(f"DEBUG: Loaded graph has {len(graph._file_to_entities)} files")
                 
                 # Still need to index entities
                 all_entities = [e for _, e in graph.get_all_entities()]
@@ -195,7 +197,7 @@ class CompletionPipeline:
     def process_task(
         self,
         task: Dict[str, Any]
-    ) -> str:
+    ) -> Dict[str, str]:
         """
         Process a single completion task.
         
@@ -203,18 +205,22 @@ class CompletionPipeline:
             task: Task dictionary with prefix, suffix, path, etc.
         
         Returns:
-            Context string
+            Dictionary with context, prefix, and suffix
         """
         repo = task.get('repo', '')
         revision = task.get('revision', '')
         cache_key = f"{repo}@{revision}"
         
+        # Get prefix and suffix from task
+        prefix = task.get('prefix', '')
+        suffix = task.get('suffix', '')
+        
         # Get or build graph and retriever
         if cache_key not in self._repo_cache:
             repo_path = self.get_repo_path(task)
             if not repo_path:
-                # Fallback: return empty context
-                return ""
+                # Fallback: return empty context with prefix/suffix
+                return {"context": "", "prefix": prefix, "suffix": suffix}
             
             graph, retriever = self.repo_processor.process_repository(
                 repo_path,
@@ -234,7 +240,12 @@ class CompletionPipeline:
         
         context = assembler.assemble_for_task(task, graph, retriever)
         
-        return context
+        # Return dict with context, prefix, and suffix
+        return {
+            "context": context,
+            "prefix": prefix,
+            "suffix": suffix
+        }
     
     def process_jsonl(
         self,
@@ -296,9 +307,7 @@ class CompletionPipeline:
                 logger.info(f"Processing task {task_num} (line {line_num}): {task_id}")
                 
                 try:
-                    context = self.process_task(task)
-                    
-                    prediction = {"context": context}
+                    prediction = self.process_task(task)
                     f_out.write(json.dumps(prediction) + '\n')
                     
                 except Exception as e:
@@ -306,8 +315,12 @@ class CompletionPipeline:
                     import traceback
                     traceback.print_exc()
                     
-                    # Write empty context on error
-                    prediction = {"context": ""}
+                    # Write empty context on error (with prefix/suffix if available)
+                    prediction = {
+                        "context": "",
+                        "prefix": task.get('prefix', ''),
+                        "suffix": task.get('suffix', '')
+                    }
                     f_out.write(json.dumps(prediction) + '\n')
                 
                 count += 1

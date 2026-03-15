@@ -367,6 +367,11 @@ class CodeGraph:
     def get_entities_by_file(self, file_path: str) -> List[Any]:
         """Get all entities from a file."""
         entity_ids = self._file_to_entities.get(file_path, set())
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"get_entities_by_file: {file_path} -> {len(entity_ids)} entity IDs")
+        if not entity_ids and file_path in str(self._file_to_entities.keys())[:200]:
+            logger.debug(f"  Available paths: {list(self._file_to_entities.keys())[:10]}")
         return [self.get_entity(eid) for eid in entity_ids if self.get_entity(eid)]
     
     def get_entities_by_name(self, name: str) -> List[Any]:
