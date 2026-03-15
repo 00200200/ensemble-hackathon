@@ -19,7 +19,7 @@ def extract_features(smiles_list: list[str]) -> np.ndarray:
     print("  Computing fingerprints...")
     X = make_union(
         ECFPFingerprint(fp_size=2048, radius=2, count=True, n_jobs=N_JOBS),
-        MACCSFingerprint(n_jobs=N_JOBS),
+        MACCSFingerprint(n_jobs=N_JOBS, count=True),
         RDKit2DDescriptorsFingerprint(n_jobs=N_JOBS),
     ).transform(mols)
 
