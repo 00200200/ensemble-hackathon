@@ -21,7 +21,7 @@ def main():
     parser.add_argument(
         '--stage',
         default='practice',
-        choices=['practice', 'public'],
+        choices=['practice', 'public', 'dataset'],
         help='Competition stage to process'
     )
     parser.add_argument(
@@ -57,6 +57,17 @@ def main():
         action='store_true',
         help='Enable verbose logging'
     )
+    parser.add_argument(
+        '--skip',
+        type=int,
+        default=0,
+        help='Skip first N tasks (for resuming)'
+    )
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='Auto-skip tasks already in output file (preserves order)'
+    )
     
     args = parser.parse_args()
     
@@ -67,28 +78,48 @@ def main():
     )
     
     # Determine paths
-    input_file = args.data_dir / f"python-{args.stage}.jsonl"
+    # Dataset stage uses python-test.jsonl as input
+    if args.stage == 'dataset':
+        input_file = args.data_dir / "python-test.jsonl"
+    else:
+        input_file = args.data_dir / f"python-{args.stage}.jsonl"
     
     if args.output:
         output_file = args.output
     else:
-        output_file = Path('predictions') / f"python-{args.stage}-predictions.jsonl"
+        # Dataset stage outputs to a different filename
+        if args.stage == 'dataset':
+            output_file = Path('predictions') / "python-dataset-predictions.jsonl"
+        else:
+            output_file = Path('predictions') / f"python-{args.stage}-predictions.jsonl"
     
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
+    
+    # Handle resume logic
+    skip = args.skip
+    if args.resume and output_file.exists():
+        # Count existing predictions
+        with open(output_file, 'r') as f:
+            existing_count = sum(1 for _ in f)
+        skip = existing_count
+        print(f"Resuming: Found {existing_count} existing predictions, skipping {skip} tasks")
     
     # Create pipeline
     pipeline = CompletionPipeline(
         data_dir=args.data_dir,
         cache_dir=args.cache,
-        max_tokens=args.max_tokens
+        max_tokens=args.max_tokens,
+        stage=args.stage
     )
     
     # Process
     pipeline.process_jsonl(
         input_path=input_file,
         output_path=output_file,
-        limit=args.limit
+        limit=args.limit,
+        skip=skip,
+        append=args.resume or args.skip > 0
     )
     
     print(f"\nPredictions written to: {output_file}")

@@ -150,3 +150,5 @@ Output format verified:
 1. **graph_store.py**: Fixed `get_node_data` to use `self.graph.nodes.get()` for NetworkX compatibility
 2. **run_pipeline.py**: Fixed argument name from `max_context_tokens` to `max_tokens`
 3. **run_pipeline.py**: Added missing `data_dir` argument to CompletionPipeline constructor
+4. **CRITICAL - pipeline.py**: Fixed repo extraction path bug - was returning `subdirs[0]` (wrong) instead of `extract_dir` (correct)
+5. **baselines.py**: Added rank-bm25 dependency to pyproject.toml

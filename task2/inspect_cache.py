@@ -23,7 +23,7 @@ def main():
     graph_files = list(cache_dir.glob("*_graph.pkl"))
     if graph_files:
         print(f"Loading graph: {graph_files[0]}")
-        from task2.graph_store import CodeGraph
+        from src.graph_store import CodeGraph
         graph = CodeGraph.load(graph_files[0])
         
         stats = graph.get_stats()
@@ -42,7 +42,7 @@ def main():
     retriever_dirs = [d for d in cache_dir.iterdir() if d.is_dir()]
     if retriever_dirs:
         print(f"Loading retriever: {retriever_dirs[0]}")
-        from task2.vector_store import HybridRetriever
+        from src.vector_store import HybridRetriever
         retriever = HybridRetriever()
         retriever.load(retriever_dirs[0])
         

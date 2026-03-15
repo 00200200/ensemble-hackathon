@@ -547,23 +547,54 @@ class ASTParser:
             self.extractor = NativeASTExtractor()
             logger.info("Using native Python AST parser")
     
-    def parse_file(self, file_path: Union[str, Path]) -> FileParseResult:
-        """Parse a single file."""
+    def parse_file(
+        self, 
+        file_path: Union[str, Path],
+        base_path: Optional[Union[str, Path]] = None
+    ) -> FileParseResult:
+        """Parse a single file.
+        
+        Args:
+            file_path: Path to the file to parse
+            base_path: If provided, store relative paths in entities (for cache portability)
+        """
         file_path = Path(file_path)
+        base_path = Path(base_path) if base_path else None
         
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
         
         content = file_path.read_text(encoding='utf-8', errors='replace')
-        return self.extractor.parse_file(file_path, content)
+        
+        # Parse with absolute path first
+        result = self.extractor.parse_file(file_path, content)
+        
+        # Convert to relative path if base_path provided
+        if base_path:
+            try:
+                rel_path = str(file_path.relative_to(base_path))
+                # Update the result with relative path
+                result.file_path = rel_path
+                # Update all entities
+                for entity in result.entities:
+                    entity.file_path = rel_path
+            except ValueError:
+                # file_path is not under base_path, keep absolute
+                pass
+        
+        return result
     
     def parse_directory(
         self, 
         dir_path: Union[str, Path],
         exclude_patterns: Optional[Set[str]] = None
     ) -> List[FileParseResult]:
-        """Parse all Python files in a directory."""
-        dir_path = Path(dir_path)
+        """Parse all Python files in a directory.
+        
+        Stores relative paths in entities for cache portability across different
+        extraction directories.
+        """
+        dir_path = Path(dir_path).resolve()
         exclude_patterns = exclude_patterns or {
             '__pycache__', '.git', 'venv', '.venv', 'node_modules',
             '.tox', '.pytest_cache', '.mypy_cache', '*.egg-info'
@@ -580,7 +611,8 @@ class ASTParser:
                 continue
             
             try:
-                result = self.parse_file(file_path)
+                # Parse with relative paths (base_path=dir_path)
+                result = self.parse_file(file_path, base_path=dir_path)
                 results.append(result)
             except Exception as e:
                 logger.warning(f"Failed to parse {file_path}: {e}")
