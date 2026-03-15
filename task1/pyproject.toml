@@ -1,7 +1,32 @@
 [project]
 name = "task1"
 version = "0.1.0"
-description = "Add your description here"
+description = "ChEBI 500-class hierarchical molecular classification"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pandas",
+    "pyarrow",
+    "numpy",
+    "scikit-learn",
+    "lightgbm",
+    "scikit-fingerprints",
+    "python-dotenv",
+    "requests",
+    "numba==0.60.0",
+    "llvmlite==0.43.0",
+    "matplotlib",
+    "networkx",
+    "seaborn",
+]
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "sys_platform == 'win32'",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
