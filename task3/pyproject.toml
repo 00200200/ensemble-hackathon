@@ -1,0 +1,18 @@
+[project]
+name = "task3"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "polars-lts-cpu>=1.0",
+    "lightgbm>=4.0",
+    "scikit-learn>=1.4",
+    "numpy>=1.26",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+    "matplotlib>=3.8",
+    "pyarrow>=23.0.1",
+    "pandas>=3.0.1",
+    "xgboost>=3.2.0",
+]
