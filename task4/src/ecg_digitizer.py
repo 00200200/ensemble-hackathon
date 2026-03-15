@@ -23,11 +23,13 @@ class DigitizerConfig:
 	adaptive_c: int = 8
 	min_component_area: int = 20
 	bbox_padding: int = 12
-	lead_left_trim_ratio: float = 0.12
-	lead_right_trim_ratio: float = 0.03
-	lead_top_trim_ratio: float = 0.14
-	lead_bottom_trim_ratio: float = 0.16
-	bottom_row_extra_trim_ratio: float = 0.10
+	# Set horizontal trim to 0 to preserve time alignment (Time Calibration score)
+	lead_left_trim_ratio: float = 0.0
+	lead_right_trim_ratio: float = 0.0
+	# Minimal vertical trim to avoid border noise, but kept small
+	lead_top_trim_ratio: float = 0.02
+	lead_bottom_trim_ratio: float = 0.02
+	bottom_row_extra_trim_ratio: float = 0.0
 	text_component_max_area_ratio: float = 0.02
 	text_component_max_width_ratio: float = 0.18
 	text_component_max_height_ratio: float = 0.35
@@ -154,7 +156,11 @@ def _find_column_bands(mask: np.ndarray, config: DigitizerConfig) -> list[tuple[
 	h, w = mask.shape
 	profile = mask.sum(axis=0).astype(np.float32) / 255.0
 	expected = [int(round(w * frac / config.grid_cols)) for frac in range(1, config.grid_cols)]
-	valleys = _find_valleys(profile, expected, radius=max(10, w // 18))
+	
+	# Tighten search radius to avoid large time shifts (Time Calibration penalty)
+	# Trust geometric structure for "Hard" (crumpled/rotated) images.
+	valleys = _find_valleys(profile, expected, radius=max(5, w // 60))
+	
 	edges = [0] + valleys + [w]
 	bands: list[tuple[int, int]] = []
 	for i in range(config.grid_cols):
@@ -240,16 +246,37 @@ def crop_signal_region(
 	image: np.ndarray,
 	signal_mask: np.ndarray,
 	config: DigitizerConfig = DigitizerConfig(),
+	reference_mask: np.ndarray = None,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]]:
-	points = cv2.findNonZero(signal_mask)
+	# Use union of signal and reference (grid) for bounding box to preserve context
+	if reference_mask is not None and reference_mask.shape == signal_mask.shape:
+		combined = cv2.bitwise_or(signal_mask, reference_mask)
+	else:
+		combined = signal_mask
+
+	points = cv2.findNonZero(combined)
 	if points is None:
 		return image, signal_mask, (0, 0, image.shape[1], image.shape[0])
+	
 	x, y, w, h = cv2.boundingRect(points)
 	pad = config.bbox_padding
-	x0 = max(0, x - pad)
+	
+	# Horizontal cropping logic: Align to Grid (Reference) if possible
+	x0, x1 = 0, image.shape[1]
+	
+	if reference_mask is not None:
+		ref_pts = cv2.findNonZero(reference_mask)
+		if ref_pts is not None:
+			rx, ry, rw, rh = cv2.boundingRect(ref_pts)
+			# Grid check: Should cover substantial width to be valid time axis
+			if rw > image.shape[1] * 0.5:
+				x0 = rx
+				x1 = rx + rw
+
+	# Vertical cropping logic: Align to Content (Combined) with padding
 	y0 = max(0, y - pad)
-	x1 = min(image.shape[1], x + w + pad)
 	y1 = min(image.shape[0], y + h + pad)
+	
 	cropped_image = image[y0:y1, x0:x1]
 	cropped_mask = signal_mask[y0:y1, x0:x1]
 
@@ -259,11 +286,15 @@ def crop_signal_region(
 		selected = bands[: config.grid_rows]
 		top = max(0, selected[0][0] - pad)
 		bottom = min(cropped_image.shape[0], selected[-1][1] + pad)
+		
 		cropped_image = cropped_image[top:bottom, :]
 		cropped_mask = cropped_mask[top:bottom, :]
+		
 		y0 = y0 + top
 		y1 = y0 + cropped_image.shape[0]
+		
 		return cropped_image, cropped_mask, (x0, y0, x1, y1)
+		
 	return cropped_image, cropped_mask, (x0, y0, x1, y1)
 
 
@@ -338,12 +369,102 @@ def _projection_spacing(projection: np.ndarray) -> float:
 
 
 def estimate_pixels_per_mm(grid_mask: np.ndarray, roi_width: int) -> float:
+	# Robust heuristic: The standard ECG 12-lead image width corresponds to 10 seconds.
+	# At 25 mm/s paper speed, 10s = 250 mm.
+	# Ideally, pixels_per_mm = width_pixels / 250.0
+	width_based_ppm = roi_width / 250.0
+
+	# Ensure we have enough grid points to trust the local grid estimation
+	# For "Hard" images (photocopies, crumpled), local grid is unreliable.
+	# We require a decent density of grid signal.
+	total_pixels = grid_mask.size
+	if total_pixels == 0:
+		return width_based_ppm
+	
+	grid_density = cv2.countNonZero(grid_mask) / total_pixels
+	
+	# If grid is very sparse (likely just noise or bad detection), trust the document width
+	if grid_density < 0.005:
+		return width_based_ppm
+
 	x_spacing = _projection_spacing(grid_mask.sum(axis=0) / 255.0)
 	y_spacing = _projection_spacing(grid_mask.sum(axis=1) / 255.0)
+	
 	spacings = [value for value in [x_spacing, y_spacing] if value > 0]
 	if spacings:
-		return float(np.median(spacings))
-	return max(roi_width / 250.0, 1.0)
+		local_ppm = float(np.median(spacings))
+		# Sanity check: local_ppm should be within reasonable bounds of width_based (e.g. +/- 20%)
+		# Smartphone photos might scale things, but extreme deviations imply detection error
+		if 0.8 * width_based_ppm < local_ppm < 1.2 * width_based_ppm:
+			return local_ppm
+
+	return width_based_ppm
+
+
+def _fast_viterbi_trace(mask: np.ndarray, config: DigitizerConfig) -> np.ndarray:
+	"""
+	Traces the ECG signal using a Viterbi-like dynamic programming algorithm
+	to find the path of maximum likelihood (pixel intensity) that satisfies
+	continuity constraints (minimized vertical jumps).
+	"""
+	h, w = mask.shape
+	# Energy: +1.0 for likely signal (value=255), -1.0 for background
+	# We normalize to 0..1 then map
+	energy = (mask.astype(np.float32) / 255.0) * 2.0 - 0.5
+	
+	dp = np.zeros_like(energy)
+	dp[:, 0] = energy[:, 0]
+	backtrack = np.zeros((h, w), dtype=np.int32)
+	
+	# Pre-allocate indices
+	rows = np.arange(h)
+	
+	# Max jump to check (vectorized optimization)
+	# Typically ECG doesn't jump more than a few pixels per column unless QRS is very steep
+	# We allow larger jumps but penalize them
+	jump_limit = 5
+	jump_penalty_base = 0.05
+	
+	for x in range(1, w):
+		prev = dp[:, x-1]
+		
+		# Start with 0 jump (stay same row)
+		best_val = prev.copy()
+		best_src = rows.copy()
+		
+		# Vectorized check of neighbors [-jump_limit ... +jump_limit]
+		for jump in range(1, jump_limit + 1):
+			penalty = jump * jump_penalty_base
+			
+			# Down shift: current y comes from y-jump (prev[y-jump])
+			# roll is not correct for boundary, use slicing
+			val_down = np.full(h, -1e9, dtype=np.float32)
+			val_down[jump:] = prev[:-jump] - penalty
+			
+			mask_down = val_down > best_val
+			best_val[mask_down] = val_down[mask_down]
+			best_src[mask_down] = rows[mask_down] - jump
+			
+			# Up shift: current y comes from y+jump (prev[y+jump])
+			val_up = np.full(h, -1e9, dtype=np.float32)
+			val_up[:-jump] = prev[jump:] - penalty
+			
+			mask_up = val_up > best_val
+			best_val[mask_up] = val_up[mask_up]
+			best_src[mask_up] = rows[mask_up] + jump
+			
+		dp[:, x] = best_val + energy[:, x]
+		backtrack[:, x] = best_src
+
+	# Backtrack finding max path
+	path = np.zeros(w, dtype=np.float32)
+	curr = np.argmax(dp[:, -1])
+	path[-1] = float(curr)
+	for x in range(w - 2, -1, -1):
+		curr = backtrack[curr, x+1]
+		path[x] = float(curr)
+		
+	return path
 
 
 def extract_waveform(
@@ -355,33 +476,13 @@ def extract_waveform(
 	if h == 0 or w == 0:
 		return np.zeros(config.samples_per_lead, dtype=np.float32), np.zeros(0, dtype=np.float32)
 
-	y_values = np.full(w, np.nan, dtype=np.float32)
-	max_jump_px = max(2.0, float(h * config.trace_max_jump_ratio))
-	prev_y = np.nan
-	for x_idx in range(w):
-		y_coords = np.flatnonzero(block_mask[:, x_idx] > 0)
-		if y_coords.size == 0:
-			continue
-		if np.isnan(prev_y):
-			y_pick = float(np.median(y_coords))
-		else:
-			deltas = np.abs(y_coords.astype(np.float32) - prev_y)
-			best_idx = int(np.argmin(deltas))
-			if float(deltas[best_idx]) <= max_jump_px:
-				y_pick = float(y_coords[best_idx])
-			else:
-				y_pick = float(np.median(y_coords))
-		y_values[x_idx] = y_pick
-		prev_y = y_pick
+	# Use SOTA Viterbi tracing instead of greedy column search
+	y_values = _fast_viterbi_trace(block_mask, config)
 
-	valid_idx = np.flatnonzero(~np.isnan(y_values))
-	if valid_idx.size == 0:
-		return np.zeros(config.samples_per_lead, dtype=np.float32), y_values
-	if valid_idx.size == 1:
-		y_values[:] = y_values[valid_idx[0]]
-	else:
-		interpolator = interp1d(valid_idx, y_values[valid_idx], kind="linear", bounds_error=False, fill_value="extrapolate")
-		y_values = interpolator(np.arange(w)).astype(np.float32)
+	# Optional: Refine y_values where signal is completely missing (mask is all 0)
+	# The Viterbi might stick to one edge or drift if energy is all -0.5.
+	# We can mask out parts where the underlying pixel value is 0 on the path?
+	# For now, we trust the DP to find the "least bad" path through noise or silence.
 
 	if w >= 3:
 		win = max(3, _ensure_odd(config.trace_smooth_window))
@@ -411,7 +512,7 @@ def digitize_ecg_image(image: np.ndarray, config: DigitizerConfig = DigitizerCon
 		raise ValueError("Input image is None")
 
 	signal_mask, grid_mask, debug = build_signal_mask(image, config)
-	roi_image, roi_mask, (x0, y0, x1, y1) = crop_signal_region(image, signal_mask, config)
+	roi_image, roi_mask, (x0, y0, x1, y1) = crop_signal_region(image, signal_mask, config, reference_mask=grid_mask)
 	roi_grid = grid_mask[y0:y1, x0:x1]
 	pixels_per_mm = estimate_pixels_per_mm(roi_grid, roi_width=roi_image.shape[1])
 	lead_blocks = split_into_leads(roi_image, roi_mask, config)

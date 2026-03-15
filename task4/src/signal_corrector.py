@@ -21,59 +21,92 @@ class SignalSample:
 	y: np.ndarray
 
 
-class ResidualBlock(nn.Module):
-	def __init__(self, channels: int, dilation: int, dropout: float) -> None:
+class ConvBlock(nn.Module):
+	def __init__(self, in_channels: int, out_channels: int, dropout: float) -> None:
 		super().__init__()
-		padding = dilation * 3
-		self.block = nn.Sequential(
-			nn.Conv1d(channels, channels, kernel_size=7, dilation=dilation, padding=padding, bias=False),
-			nn.BatchNorm1d(channels),
-			nn.GELU(),
-			nn.Dropout(dropout),
-			nn.Conv1d(channels, channels, kernel_size=1, bias=False),
-			nn.BatchNorm1d(channels),
-			nn.GELU(),
-			nn.Dropout(dropout),
-		)
-		self.se = nn.Sequential(
-			nn.AdaptiveAvgPool1d(1),
-			nn.Conv1d(channels, channels // 8, 1),
-			nn.ReLU(),
-			nn.Conv1d(channels // 8, channels, 1),
-			nn.Sigmoid(),
-		)
-		self.act = nn.GELU()
+		self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
+		self.norm1 = nn.BatchNorm1d(out_channels)
+		self.act1 = nn.GELU()
+		self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
+		self.norm2 = nn.BatchNorm1d(out_channels)
+		self.act2 = nn.GELU()
+		self.drop = nn.Dropout(dropout)
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
-		out = self.block(x)
-		# Squeeze-and-Excitation
-		w = self.se(out)
-		out = out * w
-		return self.act(x + out)
+		res = x if x.shape[1] == self.conv2.out_channels else None
+		out = self.act1(self.norm1(self.conv1(x)))
+		out = self.drop(self.act2(self.norm2(self.conv2(out))))
+		if res is not None:
+			return out + res
+		return out
 
 
 class ResidualCorrector(nn.Module):
-	def __init__(self, channels: int = 128, dropout: float = 0.2, dilations: Iterable[int] = None) -> None:
+	"""
+	Replaces the original ResidualCorrector with a U-Net style architecture (1D),
+	which is SOTA for signal restoration tasks.
+	"""
+	def __init__(self, channels: int = 32, dropout: float = 0.1, dilations: Iterable[int] = None) -> None:
 		super().__init__()
-		if dilations is None:
-			# 16 residual blocks with exponentially increasing dilation
-			dilations = [2 ** i for i in range(8)] * 2
-		self.stem = nn.Sequential(
-			nn.Conv1d(1, channels, kernel_size=15, padding=7, bias=False),
-			nn.BatchNorm1d(channels),
-			nn.GELU(),
-		)
-		self.body = nn.Sequential(*[ResidualBlock(channels, dilation=d, dropout=dropout) for d in dilations])
-		self.head = nn.Sequential(
-			nn.Conv1d(channels, channels, kernel_size=7, padding=3, bias=False),
-			nn.BatchNorm1d(channels),
-			nn.GELU(),
-			nn.Conv1d(channels, 1, kernel_size=1),
-		)
+		# Note: 'dilations' arg is kept for compatibility but ignored in UNet structure
+		
+		self.inc = ConvBlock(1, channels, dropout)
+		
+		# Downsampling
+		self.down1 = nn.Sequential(nn.MaxPool1d(2), ConvBlock(channels, channels * 2, dropout))
+		self.down2 = nn.Sequential(nn.MaxPool1d(2), ConvBlock(channels * 2, channels * 4, dropout))
+		self.down3 = nn.Sequential(nn.MaxPool1d(2), ConvBlock(channels * 4, channels * 8, dropout))
+		self.down4 = nn.Sequential(nn.MaxPool1d(2), ConvBlock(channels * 8, channels * 16, dropout))
+		
+		# Upsampling
+		self.up1 = nn.ConvTranspose1d(channels * 16, channels * 8, kernel_size=2, stride=2)
+		self.conv1 = ConvBlock(channels * 16, channels * 8, dropout)
+		
+		self.up2 = nn.ConvTranspose1d(channels * 8, channels * 4, kernel_size=2, stride=2)
+		self.conv2 = ConvBlock(channels * 8, channels * 4, dropout)
+		
+		self.up3 = nn.ConvTranspose1d(channels * 4, channels * 2, kernel_size=2, stride=2)
+		self.conv3 = ConvBlock(channels * 4, channels * 2, dropout)
+		
+		self.up4 = nn.ConvTranspose1d(channels * 2, channels, kernel_size=2, stride=2)
+		self.conv4 = ConvBlock(channels * 2, channels, dropout)
+		
+		self.outc = nn.Conv1d(channels, 1, kernel_size=1)
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
-		features = self.body(self.stem(x))
-		return x + self.head(features)
+		# x: [B, 1, L]
+		x1 = self.inc(x)       # -> [B, C, L]
+		x2 = self.down1(x1)    # -> [B, 2C, L/2]
+		x3 = self.down2(x2)    # -> [B, 4C, L/4]
+		x4 = self.down3(x3)    # -> [B, 8C, L/8]
+		x5 = self.down4(x4)    # -> [B, 16C, L/16]
+		
+		x = self.up1(x5)
+		# Pad if necessary for concatenation
+		if x4.shape[-1] != x.shape[-1]:
+			x = nn.functional.interpolate(x, size=x4.shape[-1])
+		x = torch.cat([x4, x], dim=1)
+		x = self.conv1(x)
+
+		x = self.up2(x)
+		if x3.shape[-1] != x.shape[-1]:
+			x = nn.functional.interpolate(x, size=x3.shape[-1])
+		x = torch.cat([x3, x], dim=1)
+		x = self.conv2(x)
+
+		x = self.up3(x)
+		if x2.shape[-1] != x.shape[-1]:
+			x = nn.functional.interpolate(x, size=x2.shape[-1])
+		x = torch.cat([x2, x], dim=1)
+		x = self.conv3(x)
+
+		x = self.up4(x)
+		if x1.shape[-1] != x.shape[-1]:
+			x = nn.functional.interpolate(x, size=x1.shape[-1])
+		x = torch.cat([x1, x], dim=1)
+		x = self.conv4(x)
+
+		return x + self.outc(x) # Residual learning
 
 
 def _is_train_key(key: str) -> bool:
@@ -173,10 +206,15 @@ class AugmentedSignalDataset(Dataset):
 		return x, y
 
 
-def _evaluate_numpy(model: nn.Module, x: np.ndarray, y: np.ndarray, device: torch.device) -> tuple[float, float, float]:
+def _evaluate_numpy(model: nn.Module, x: np.ndarray, y: np.ndarray, device: torch.device, batch_size: int = 128) -> tuple[float, float, float]:
 	model.eval()
+	preds = []
 	with torch.no_grad():
-		pred = model(torch.from_numpy(x[:, None, :]).to(device)).cpu().numpy()[:, 0, :]
+		for i in range(0, x.shape[0], batch_size):
+			batch_x = torch.from_numpy(x[i : i + batch_size][:, None, :]).to(device)
+			batch_pred = model(batch_x).cpu().numpy()[:, 0, :]
+			preds.append(batch_pred)
+	pred = np.concatenate(preds, axis=0)
 	mae = float(np.mean(np.abs(pred - y)))
 	rmse = float(np.sqrt(np.mean((pred - y) ** 2)))
 	corrs = [_corrcoef_np(pred[i], y[i]) for i in range(pred.shape[0])]
@@ -205,7 +243,7 @@ def _composite_loss(pred: torch.Tensor, target: torch.Tensor, args: argparse.Nam
 
 def train_corrector(args: argparse.Namespace) -> int:
 	base_dir = Path(__file__).resolve().parents[1]
-	train_dir = base_dir / "src" / "data" / "train"
+	train_dir = base_dir / "data" / "train"
 	npz_paths = sorted(Path().glob(args.npz_glob))
 	if not npz_paths:
 		print(f"No NPZ files matched: {args.npz_glob}")
@@ -302,7 +340,7 @@ def train_corrector(args: argparse.Namespace) -> int:
 	mae_before = float(np.mean(np.abs(x_val - y_val)))
 	rmse_before = float(np.sqrt(np.mean((x_val - y_val) ** 2)))
 	corr_before = float(np.mean([_corrcoef_np(x_val[i], y_val[i]) for i in range(x_val.shape[0])]))
-	mae_after, rmse_after, corr_after = _evaluate_numpy(model, x_val_n, y_val_n, device)
+	mae_after, rmse_after, corr_after = _evaluate_numpy(model, x_val_n, y_val_n, device, batch_size=args.batch_size)
 	mae_after *= std
 	rmse_after *= std
 
@@ -367,8 +405,8 @@ def build_parser() -> argparse.ArgumentParser:
 	sub = parser.add_subparsers(dest="command", required=True)
 
 	train = sub.add_parser("train", help="Train corrector from train NPZ vs ground truth")
-	train.add_argument("--npz-glob", default="task4/data/out/ecg_train_*_digitized.npz")
-	train.add_argument("--model-out", default="task4/data/out/signal_corrector.pt")
+	train.add_argument("--npz-glob", default="data/digitized_train/ecg_train_*_digitized.npz")
+	train.add_argument("--model-out", default="src/signal_corrector_recordsplit.pt")
 	train.add_argument("--epochs", type=int, default=200)
 	train.add_argument("--batch-size", type=int, default=128)
 	train.add_argument("--lr", type=float, default=2e-3)

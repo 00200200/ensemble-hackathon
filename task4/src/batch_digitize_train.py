@@ -8,8 +8,8 @@ from ecg_digitizer import digitize_ecg_file
 
 def _build_parser() -> argparse.ArgumentParser:
 	parser = argparse.ArgumentParser(description="Batch digitize ECG train images to NPZ")
-	parser.add_argument("--images-dir", default="task4/src/data/train")
-	parser.add_argument("--out-dir", default="task4/data/out")
+	parser.add_argument("--images-dir", default="data/train")
+	parser.add_argument("--out-dir", default="data/digitized_train")
 	parser.add_argument("--glob", default="ecg_train_*.png")
 	parser.add_argument("--max-images", type=int, default=0, help="0 means all")
 	parser.add_argument("--overwrite", action="store_true")

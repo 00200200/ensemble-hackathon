@@ -54,8 +54,8 @@ except Exception as exc:
     ResidualCorrector = None
 
 
-NPZ_FILE = BASE_DIR / "data" / "out" / "task4_submission.npz"
-TEST_IMAGES_DIR = SRC_DIR / "data" / "test"
+NPZ_FILE = BASE_DIR / "submission.npz"
+TEST_IMAGES_DIR = BASE_DIR / "data" / "test"
 CORRECTOR_PATH = SRC_DIR / "signal_corrector_recordsplit.pt"
 REQUIRE_CORRECTOR = True
 STANDARD_LEADS = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
