@@ -235,7 +235,8 @@ class ContextAssembler:
         current_file: str,
         current_file_entities: Optional[List[Any]] = None,
         prefix: str = "",
-        suffix: str = ""
+        suffix: str = "",
+        modified_files: Optional[List[str]] = None
     ) -> List[ContextItem]:
         """
         Assemble context for a completion task.
@@ -246,21 +247,26 @@ class ContextAssembler:
             current_file_entities: Entities from current file
             prefix: Code before cursor
             suffix: Code after cursor
+            modified_files: List of files modified in the same commit (high relevance)
         
         Returns:
             List of context items sorted by ascending relevance
         """
         context_items: List[ContextItem] = []
         seen_entities: Set[str] = set()
+        modified_files = modified_files or []
         
         # 1. Add current file entities (highest priority)
+        # ALWAYS include current file - this is THE MOST IMPORTANT context
         if current_file_entities:
+            logger.info(f"Adding {len(current_file_entities)} entities from current file")
             for entity in current_file_entities:
                 entity_id = entity.id if hasattr(entity, 'id') else str(entity)
                 if entity_id in seen_entities:
                     continue
                 seen_entities.add(entity_id)
                 
+                # Use FULL CODE, not abstract, for current file
                 code = entity.raw_code if hasattr(entity, 'raw_code') else str(entity)
                 tokens = self.estimate_tokens(code)
                 
@@ -268,11 +274,53 @@ class ContextAssembler:
                     entity=entity,
                     entity_id=entity_id,
                     source='current_file',
-                    relevance_score=1.0,  # Highest relevance
-                    code_to_show=code,
+                    relevance_score=2.0,  # HIGHEST relevance
+                    code_to_show=code,  # FULL CODE
                     token_estimate=tokens
                 )
                 context_items.append(item)
+        else:
+            logger.warning(f"No entities found for current file: {current_file}")
+        
+        # 2. Add entities from MODIFIED FILES - files changed in same commit
+        # These are HIGHLY RELEVANT because they were modified together!
+        if modified_files and hasattr(self.graph, 'get_entities_by_file'):
+            logger.info(f"Adding entities from {len(modified_files)} modified files")
+            
+            # Calculate budget per modified file to ensure ALL are represented
+            mod_files_only = [f for f in modified_files if f != current_file]
+            if mod_files_only:
+                # Use abstracts for modified files so we can fit ALL of them
+                # This is crucial - ALL modified files should be in context
+                for mod_file in mod_files_only:
+                    try:
+                        mod_entities = self.graph.get_entities_by_file(mod_file)
+                        if mod_entities:
+                            logger.info(f"  - {mod_file}: {len(mod_entities)} entities")
+                            for entity in mod_entities:
+                                entity_id = entity.id if hasattr(entity, 'id') else str(entity)
+                                if entity_id in seen_entities:
+                                    continue
+                                seen_entities.add(entity_id)
+                                
+                                # Use ABSTRACT for modified files to fit more files
+                                # Full code would be too long and crowd out other modified files
+                                code = self._create_abstract(entity)
+                                tokens = self.estimate_tokens(code)
+                                
+                                item = ContextItem(
+                                    entity=entity,
+                                    entity_id=entity_id,
+                                    source='modified_file',
+                                    relevance_score=1.8,  # HIGH relevance
+                                    code_to_show=code,  # ABSTRACT (not full code)
+                                    token_estimate=tokens
+                                )
+                                context_items.append(item)
+                        else:
+                            logger.warning(f"  - {mod_file}: NO entities found!")
+                    except Exception as e:
+                        logger.debug(f"Could not get entities for modified file {mod_file}: {e}")
         
         # 2. Resolve imports from prefix - fetch definitions of imported symbols
         # This is crucial: if code says "from .common import BasicFunctionality",
@@ -283,7 +331,7 @@ class ContextAssembler:
                 import_definitions = resolver.resolve_symbols_from_code(
                     prefix, 
                     current_file,
-                    max_definitions=5  # Limit to avoid token overflow
+                    max_definitions=10  # Get more imports
                 )
                 
                 if import_definitions:
@@ -295,16 +343,16 @@ class ContextAssembler:
                             continue
                         seen_entities.add(entity_id)
                         
-                        # Use abstract for import definitions
-                        code = self._create_abstract(entity)
+                        # Use FULL CODE for import definitions (they're important!)
+                        code = entity.raw_code if hasattr(entity, 'raw_code') else str(entity)
                         tokens = self.estimate_tokens(code)
                         
                         item = ContextItem(
                             entity=entity,
                             entity_id=entity_id,
                             source='import_definition',
-                            relevance_score=0.95,  # Very high priority, just below current file
-                            code_to_show=code,
+                            relevance_score=1.5,  # High priority
+                            code_to_show=code,  # FULL CODE
                             token_estimate=tokens
                         )
                         context_items.append(item)
@@ -313,7 +361,8 @@ class ContextAssembler:
                 logger.warning(f"Import resolution failed: {e}")
         
         # 3. Retrieve seeds from hybrid retriever
-        seeds = self.retriever.search(query, k=self.seed_count)
+        # Increase seed count to get more candidates
+        seeds = self.retriever.search(query, k=self.seed_count * 3)
         
         for seed_entity, seed_score in seeds:
             entity_id = seed_entity.id if hasattr(seed_entity, 'id') else str(seed_entity)
@@ -326,8 +375,8 @@ class ContextAssembler:
             if degree > self.centrality_threshold:
                 seed_score *= self.centrality_penalty
             
-            # Use abstract for retrieved seeds (not full code) to save tokens
-            code = self._create_abstract(seed_entity)
+            # Use FULL CODE for retrieved seeds too - abstracts are useless!
+            code = seed_entity.raw_code if hasattr(seed_entity, 'raw_code') else str(seed_entity)
             tokens = self.estimate_tokens(code)
             
             item = ContextItem(
@@ -335,7 +384,7 @@ class ContextAssembler:
                 entity_id=entity_id,
                 source='retrieval_seed',
                 relevance_score=seed_score,
-                code_to_show=code,
+                code_to_show=code,  # FULL CODE
                 token_estimate=tokens
             )
             context_items.append(item)
@@ -412,47 +461,91 @@ class ContextAssembler:
     def _apply_token_budget(
         self,
         items: List[ContextItem],
-        current_file_budget: float = 0.4,
-        cross_file_budget: float = 0.3
+        current_file_budget: float = 0.35,  # 35% for current file
+        modified_file_budget: float = 0.40,  # 40% for modified files - MOST IMPORTANT!
+        import_budget: float = 0.15,  # 15% for imports
+        cross_file_budget: float = 0.08  # 8% for other retrieved code
     ) -> List[ContextItem]:
         """
         Apply token budget constraints.
         
         Budget allocation:
-        - 40% current file
-        - 30% cross-file context
-        - 20% suffix (handled separately)
-        - 10% buffer
+        - 35% current file 
+        - 40% modified files (changed in same commit - CRITICAL context!)
+        - 15% import definitions
+        - 8% other cross-file context
+        - 2% buffer
         """
         current_file_tokens = int(self.max_tokens * current_file_budget)
+        modified_file_tokens = int(self.max_tokens * modified_file_budget)
+        import_tokens = int(self.max_tokens * import_budget)
         cross_file_tokens = int(self.max_tokens * cross_file_budget)
         
         result = []
         current_file_used = 0
+        modified_file_used = 0
+        import_used = 0
         cross_file_used = 0
         
         for item in items:
             if item.source == 'current_file':
+                # Highest priority - current file entities
                 if current_file_used + item.token_estimate <= current_file_tokens:
                     result.append(item)
                     current_file_used += item.token_estimate
                 else:
                     # Try to truncate
                     remaining = current_file_tokens - current_file_used
-                    if remaining > 100:  # Only if meaningful amount left
+                    if remaining > 100:
                         truncated_code = self._truncate_code(item.code_to_show, remaining)
                         if truncated_code:
                             item.code_to_show = truncated_code
                             item.token_estimate = remaining
                             result.append(item)
                             current_file_used += remaining
+                            
+            elif item.source == 'modified_file':
+                # Second priority - modified files (co-changed)
+                if modified_file_used + item.token_estimate <= modified_file_tokens:
+                    result.append(item)
+                    modified_file_used += item.token_estimate
+                else:
+                    remaining = modified_file_tokens - modified_file_used
+                    if remaining > 100:
+                        truncated_code = self._truncate_code(item.code_to_show, remaining)
+                        if truncated_code:
+                            item.code_to_show = truncated_code
+                            item.token_estimate = remaining
+                            result.append(item)
+                            modified_file_used += remaining
+                            
+            elif item.source == 'import_definition':
+                # Third priority - imported symbols
+                if import_used + item.token_estimate <= import_tokens:
+                    result.append(item)
+                    import_used += item.token_estimate
+                else:
+                    remaining = import_tokens - import_used
+                    if remaining > 100:
+                        truncated_code = self._truncate_code(item.code_to_show, remaining)
+                        if truncated_code:
+                            item.code_to_show = truncated_code
+                            item.token_estimate = remaining
+                            result.append(item)
+                            import_used += remaining
+                            
             else:
+                # Lowest priority - other retrieved code
                 if cross_file_used + item.token_estimate <= cross_file_tokens:
                     result.append(item)
                     cross_file_used += item.token_estimate
                 else:
                     # Skip if over budget
                     pass
+        
+        logger.info(f"Token budget: current_file={current_file_used}/{current_file_tokens}, "
+                   f"modified={modified_file_used}/{modified_file_tokens}, "
+                   f"imports={import_used}/{import_tokens}, cross_file={cross_file_used}/{cross_file_tokens}")
         
         return result
     
@@ -480,15 +573,31 @@ class ContextAssembler:
         
         parts = []
         
-        # Group by file for better organization
+        # Sort items by source priority: current_file > modified_file > import_definition > others
+        def get_priority(item):
+            if item.source == 'current_file':
+                return (0, item.entity_id)
+            elif item.source == 'modified_file':
+                return (1, item.entity_id)  # Modified files are 2nd priority
+            elif item.source == 'import_definition':
+                return (2, item.entity_id)
+            else:
+                return (3, item.entity_id)
+        
+        sorted_items = sorted(items, key=get_priority)
+        
+        # Group by file for better organization (but maintain priority order)
         file_groups: Dict[str, List[ContextItem]] = {}
-        for item in items:
+        file_order = []
+        for item in sorted_items:
             file_path = getattr(item.entity, 'file_path', 'unknown')
             if file_path not in file_groups:
                 file_groups[file_path] = []
+                file_order.append(file_path)
             file_groups[file_path].append(item)
         
-        for file_path, file_items in file_groups.items():
+        for file_path in file_order:
+            file_items = file_groups[file_path]
             file_name = file_path.split('/')[-1] if '/' in file_path else file_path
             parts.append(f"<|file_sep|>\n# File: {file_name}")
             
@@ -512,7 +621,7 @@ class ContextAssembler:
         Convenience method to assemble context for a task.
         
         Args:
-            task: Task dictionary with prefix, suffix, path, etc.
+            task: Task dictionary with prefix, suffix, path, modified, etc.
             graph: Code graph
             retriever: Hybrid retriever
         
@@ -522,6 +631,7 @@ class ContextAssembler:
         prefix = task.get('prefix', '')
         suffix = task.get('suffix', '')
         current_file = task.get('path', '')
+        modified_files = task.get('modified', [])  # Files changed in same commit
         
         # Build query
         query = self.query_builder.build_query(prefix, suffix)
@@ -531,13 +641,14 @@ class ContextAssembler:
         if hasattr(graph, 'get_entities_by_file'):
             current_file_entities = graph.get_entities_by_file(current_file)
         
-        # Assemble context
+        # Assemble context with modified files
         context_items = self.assemble(
             query=query,
             current_file=current_file,
             current_file_entities=current_file_entities,
             prefix=prefix,
-            suffix=suffix
+            suffix=suffix,
+            modified_files=modified_files  # NEW: Pass modified files
         )
         
         return self.format_context(context_items)

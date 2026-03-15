@@ -144,25 +144,28 @@ class CompletionPipeline:
         
         # For dataset stage, use archive field if available
         if archive and stage == 'dataset':
-            # Check for extracted directory first
             archive_name = archive.replace('.zip', '')
-            extracted_dir = self.data_dir / "python-dataset" / archive_name
-            if extracted_dir.exists():
-                return extracted_dir
             
-            # Check for zip file in python-dataset
-            zip_path = self.data_dir / "python-dataset" / archive
-            if zip_path.exists():
-                # Extract to temp location
-                import tempfile
-                extract_dir = Path(tempfile.mkdtemp()) / archive_name
-                extract_dir.mkdir(parents=True, exist_ok=True)
-                
-                with zipfile.ZipFile(zip_path, 'r') as zf:
-                    zf.extractall(extract_dir)
-                
-                logger.info(f"Extracted repository to: {extract_dir}")
-                return extract_dir
+            # Check multiple possible locations for extracted directory
+            for dataset_dir in ["python-dataset", "python-dataset1", "dataset"]:
+                extracted_dir = self.data_dir / dataset_dir / archive_name
+                if extracted_dir.exists():
+                    return extracted_dir
+            
+            # Check for zip file in multiple locations
+            for dataset_dir in ["python-dataset", "python-dataset1", "dataset"]:
+                zip_path = self.data_dir / dataset_dir / archive
+                if zip_path.exists():
+                    # Extract to temp location
+                    import tempfile
+                    extract_dir = Path(tempfile.mkdtemp()) / archive_name
+                    extract_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                        zf.extractall(extract_dir)
+                    
+                    logger.info(f"Extracted repository to: {extract_dir}")
+                    return extract_dir
         
         # Standard stage handling (practice, public)
         # Check for extracted directory first
@@ -239,7 +242,8 @@ class CompletionPipeline:
         output_path: Path,
         limit: Optional[int] = None,
         skip: int = 0,
-        append: bool = False
+        append: bool = False,
+        filter_ids: Optional[set] = None
     ) -> None:
         """
         Process a JSONL file of tasks.
@@ -250,6 +254,7 @@ class CompletionPipeline:
             limit: Optional limit on number of tasks
             skip: Number of tasks to skip from beginning (for resuming)
             append: If True, append to output file instead of overwriting
+            filter_ids: Optional set of task IDs to process (skip others)
         """
         input_path = Path(input_path)
         output_path = Path(output_path)
@@ -258,14 +263,26 @@ class CompletionPipeline:
         logger.info(f"Processing {input_path} -> {output_path}")
         if skip > 0:
             logger.info(f"Skipping first {skip} tasks")
+        if filter_ids:
+            logger.info(f"Filtering to {len(filter_ids)} specific task IDs")
         
         mode = 'a' if append else 'w'
         
         with open(input_path, 'r') as f_in, open(output_path, mode) as f_out:
             count = 0
             skipped = 0
+            line_num = 0
             
             for line in f_in:
+                line_num += 1
+                
+                task = json.loads(line.strip())
+                task_id = task.get('id', f'task_{line_num}')
+                
+                # Handle filter logic
+                if filter_ids and task_id not in filter_ids:
+                    continue
+                
                 # Handle skip logic
                 if skipped < skip:
                     skipped += 1
@@ -274,11 +291,9 @@ class CompletionPipeline:
                 if limit and count >= limit:
                     break
                 
-                task = json.loads(line.strip())
-                task_id = task.get('id', f'task_{count}')
                 task_num = skip + count + 1
                 
-                logger.info(f"Processing task {task_num}: {task_id}")
+                logger.info(f"Processing task {task_num} (line {line_num}): {task_id}")
                 
                 try:
                     context = self.process_task(task)

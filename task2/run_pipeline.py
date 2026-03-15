@@ -68,6 +68,16 @@ def main():
         action='store_true',
         help='Auto-skip tasks already in output file (preserves order)'
     )
+    parser.add_argument(
+        '--filter-ids',
+        type=str,
+        help='Comma-separated task IDs to process (e.g., "2e0c8f,384ecd,38753e") or path to file with one ID per line'
+    )
+    parser.add_argument(
+        '--input',
+        type=Path,
+        help='Input JSONL file (overrides stage-based default)'
+    )
     
     args = parser.parse_args()
     
@@ -78,8 +88,10 @@ def main():
     )
     
     # Determine paths
-    # Dataset stage uses python-test.jsonl as input
-    if args.stage == 'dataset':
+    if args.input:
+        # Use explicitly provided input file
+        input_file = args.input
+    elif args.stage == 'dataset':
         input_file = args.data_dir / "python-test.jsonl"
     else:
         input_file = args.data_dir / f"python-{args.stage}.jsonl"
@@ -92,6 +104,21 @@ def main():
             output_file = Path('predictions') / "python-dataset-predictions.jsonl"
         else:
             output_file = Path('predictions') / f"python-{args.stage}-predictions.jsonl"
+    
+    # Parse filter IDs if provided
+    filter_ids = None
+    if args.filter_ids:
+        if ',' in args.filter_ids:
+            # Comma-separated list
+            filter_ids = set(args.filter_ids.split(','))
+        elif Path(args.filter_ids).exists():
+            # File with one ID per line
+            with open(args.filter_ids, 'r') as f:
+                filter_ids = set(line.strip() for line in f if line.strip())
+        else:
+            # Single ID
+            filter_ids = {args.filter_ids}
+        print(f"Filtering to {len(filter_ids)} specific task IDs")
     
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
@@ -119,7 +146,8 @@ def main():
         output_path=output_file,
         limit=args.limit,
         skip=skip,
-        append=args.resume or args.skip > 0
+        append=args.resume or args.skip > 0,
+        filter_ids=filter_ids
     )
     
     print(f"\nPredictions written to: {output_file}")
