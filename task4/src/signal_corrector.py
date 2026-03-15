@@ -26,29 +26,50 @@ class ResidualBlock(nn.Module):
 		super().__init__()
 		padding = dilation * 3
 		self.block = nn.Sequential(
-			nn.Conv1d(channels, channels, kernel_size=7, dilation=dilation, padding=padding),
+			nn.Conv1d(channels, channels, kernel_size=7, dilation=dilation, padding=padding, bias=False),
 			nn.BatchNorm1d(channels),
 			nn.GELU(),
 			nn.Dropout(dropout),
-			nn.Conv1d(channels, channels, kernel_size=1),
+			nn.Conv1d(channels, channels, kernel_size=1, bias=False),
 			nn.BatchNorm1d(channels),
+			nn.GELU(),
+			nn.Dropout(dropout),
+		)
+		self.se = nn.Sequential(
+			nn.AdaptiveAvgPool1d(1),
+			nn.Conv1d(channels, channels // 8, 1),
+			nn.ReLU(),
+			nn.Conv1d(channels // 8, channels, 1),
+			nn.Sigmoid(),
 		)
 		self.act = nn.GELU()
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
-		return self.act(x + self.block(x))
+		out = self.block(x)
+		# Squeeze-and-Excitation
+		w = self.se(out)
+		out = out * w
+		return self.act(x + out)
 
 
 class ResidualCorrector(nn.Module):
-	def __init__(self, channels: int = 64, dropout: float = 0.1, dilations: Iterable[int] = (1, 2, 4, 8)) -> None:
+	def __init__(self, channels: int = 128, dropout: float = 0.2, dilations: Iterable[int] = None) -> None:
 		super().__init__()
+		if dilations is None:
+			# 16 residual blocks with exponentially increasing dilation
+			dilations = [2 ** i for i in range(8)] * 2
 		self.stem = nn.Sequential(
-			nn.Conv1d(1, channels, kernel_size=9, padding=4),
+			nn.Conv1d(1, channels, kernel_size=15, padding=7, bias=False),
 			nn.BatchNorm1d(channels),
 			nn.GELU(),
 		)
 		self.body = nn.Sequential(*[ResidualBlock(channels, dilation=d, dropout=dropout) for d in dilations])
-		self.head = nn.Conv1d(channels, 1, kernel_size=7, padding=3)
+		self.head = nn.Sequential(
+			nn.Conv1d(channels, channels, kernel_size=7, padding=3, bias=False),
+			nn.BatchNorm1d(channels),
+			nn.GELU(),
+			nn.Conv1d(channels, 1, kernel_size=1),
+		)
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
 		features = self.body(self.stem(x))
@@ -220,24 +241,25 @@ def train_corrector(args: argparse.Namespace) -> int:
 		baseline_jitter=args.aug_baseline_jitter,
 	)
 	val_ds = TensorDataset(_to_tensor3d(x_val_n).float(), _to_tensor3d(y_val_n).float())
-	train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-	val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
+	train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+	val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model = ResidualCorrector(channels=args.channels, dropout=args.dropout).to(device)
 	opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-	scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=3)
+	scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
 	best_val = float("inf")
 	best_state = None
 	best_epoch = 0
 	no_improve_epochs = 0
+
 	for epoch in range(1, args.epochs + 1):
 		model.train()
 		run_loss = 0.0
 		for xb, yb in train_loader:
-			xb = xb.to(device=device, dtype=torch.float32)
-			yb = yb.to(device=device, dtype=torch.float32)
+			xb = xb.to(device=device, dtype=torch.float32, non_blocking=True)
+			yb = yb.to(device=device, dtype=torch.float32, non_blocking=True)
 			opt.zero_grad()
 			pred = model(xb)
 			loss = _composite_loss(pred, yb, args)
@@ -250,12 +272,12 @@ def train_corrector(args: argparse.Namespace) -> int:
 		val_loss = 0.0
 		with torch.no_grad():
 			for xb, yb in val_loader:
-				xb = xb.to(device=device, dtype=torch.float32)
-				yb = yb.to(device=device, dtype=torch.float32)
+				xb = xb.to(device=device, dtype=torch.float32, non_blocking=True)
+				yb = yb.to(device=device, dtype=torch.float32, non_blocking=True)
 				pred = model(xb)
 				val_loss += float(_composite_loss(pred, yb, args).item())
 
-		scheduler.step(val_loss)
+		scheduler.step(epoch)
 
 		if val_loss < best_val:
 			best_val = val_loss
@@ -347,12 +369,12 @@ def build_parser() -> argparse.ArgumentParser:
 	train = sub.add_parser("train", help="Train corrector from train NPZ vs ground truth")
 	train.add_argument("--npz-glob", default="task4/data/out/ecg_train_*_digitized.npz")
 	train.add_argument("--model-out", default="task4/data/out/signal_corrector.pt")
-	train.add_argument("--epochs", type=int, default=60)
-	train.add_argument("--batch-size", type=int, default=64)
-	train.add_argument("--lr", type=float, default=8e-4)
-	train.add_argument("--channels", type=int, default=64)
-	train.add_argument("--dropout", type=float, default=0.1)
-	train.add_argument("--weight-decay", type=float, default=1e-4)
+	train.add_argument("--epochs", type=int, default=200)
+	train.add_argument("--batch-size", type=int, default=128)
+	train.add_argument("--lr", type=float, default=2e-3)
+	train.add_argument("--channels", type=int, default=128)
+	train.add_argument("--dropout", type=float, default=0.2)
+	train.add_argument("--weight-decay", type=float, default=5e-4)
 	train.add_argument("--grad-clip", type=float, default=1.0)
 	train.add_argument("--patience", type=int, default=10)
 	train.add_argument("--l1-weight", type=float, default=0.05)

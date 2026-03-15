@@ -1,7 +1,13 @@
+
 import os
 import sys
-import importlib.util
 from pathlib import Path
+# Ensure src is in sys.path for all src-local imports
+BASE_DIR = Path(__file__).resolve().parent
+SRC_DIR = BASE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+import importlib.util
 
 import numpy as np
 import requests
@@ -37,24 +43,30 @@ def _import_from_src(module_name: str, file_name: str):
 ecg_digitizer_module = _import_from_src("ecg_digitizer", "ecg_digitizer.py")
 digitize_ecg_file = ecg_digitizer_module.digitize_ecg_file
 
+TORCH_IMPORT_ERROR = None
 try:
     import torch
     signal_corrector_module = _import_from_src("signal_corrector", "signal_corrector.py")
     ResidualCorrector = signal_corrector_module.ResidualCorrector
-except Exception:
+except Exception as exc:
+    TORCH_IMPORT_ERROR = exc
     torch = None
     ResidualCorrector = None
 
 
 NPZ_FILE = BASE_DIR / "data" / "out" / "task4_submission.npz"
 TEST_IMAGES_DIR = SRC_DIR / "data" / "test"
-CORRECTOR_PATH = BASE_DIR / "data" / "out" / "signal_corrector_recordsplit.pt"
+CORRECTOR_PATH = SRC_DIR / "signal_corrector_recordsplit.pt"
+REQUIRE_CORRECTOR = True
 STANDARD_LEADS = ["I", "II", "III", "AVR", "AVL", "AVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 
 def _load_corrector(model_path: Path):
-    if torch is None or ResidualCorrector is None or not model_path.exists():
-        return None, 0.0, 1.0
+    if torch is None or ResidualCorrector is None:
+        details = f" ({TORCH_IMPORT_ERROR})" if TORCH_IMPORT_ERROR is not None else ""
+        raise RuntimeError(f"Corrector dependencies failed to import{details}")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Corrector model file not found: {model_path}")
 
     ckpt = torch.load(model_path, map_location="cpu")
     model = ResidualCorrector(
@@ -87,10 +99,9 @@ def generate_submission_npz() -> None:
         raise FileNotFoundError(f"No test images found in {TEST_IMAGES_DIR}")
 
     model, mean, std = _load_corrector(CORRECTOR_PATH)
-    if model is None:
-        print("Corrector model unavailable, using raw digitizer output")
-    else:
-        print(f"Using corrector model: {CORRECTOR_PATH}")
+    if REQUIRE_CORRECTOR and model is None:
+        raise RuntimeError("Corrector model is required but unavailable")
+    print(f"Using corrector model: {CORRECTOR_PATH}")
 
     submission_dict = {}
     total = len(image_paths)
